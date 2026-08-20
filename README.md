@@ -195,7 +195,7 @@ The project will be evaluated against the following targets, to be defined concr
 
 | GitHub Handle | Name | Role |
 |---|---|---|
-| [@ESSpoorthy](https://github.com/ESSpoorthy) | Sai Spoorthy Eturu | Repository Owner |
+| [@ESpoorthy](https://github.com/ESpoorthy) | Sai Spoorthy Eturu | Repository Owner |
 | [@placedeliteverifypotxnicufu](https://github.com/placedeliteverifypotxnicufu) | Kommera Harihanika | Collaborator |
 | [@Duddalasrija](https://github.com/Duddalasrija) | Duddala Srija | Collaborator |
 | [@glory-pranavi](https://github.com/glory-pranavi) | Glory Pranavi B | Collaborator |
