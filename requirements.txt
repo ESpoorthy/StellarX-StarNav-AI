@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# StellarX-StarNav-AI — Core Dependencies
+# Python 3.11+
+#
+# Install with:  pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Numerical computing
+numpy>=1.26,<2.0
+
+# Data handling
+pandas>=2.2,<3.0
+
+# Computer vision / image processing
+opencv-python>=4.9,<5.0
+
+# Plotting and visualization
+matplotlib>=3.8,<4.0
+
+# Machine-learning utilities (metrics, preprocessing helpers)
+scikit-learn>=1.4,<2.0
+
+# Deep learning framework — PyTorch
+# (CPU-only build; swap for torch with CUDA extras for GPU training)
+torch>=2.2,<3.0
+torchvision>=0.17,<1.0
+
+# Configuration management
+pyyaml>=6.0,<7.0
+
+# Interactive web application
+streamlit>=1.35,<2.0
+
+# Testing
+pytest>=8.0,<9.0
+
+# Notebook support (optional, for running .ipynb files)
+jupyter>=1.0,<2.0
+ipykernel>=6.29,<7.0

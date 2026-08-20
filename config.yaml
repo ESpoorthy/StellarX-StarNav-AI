@@ -1,0 +1,73 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# StellarX-StarNav-AI — Project Configuration Template
+#
+# All runtime parameters are centralised here.
+# Do NOT hard-code paths or hyperparameters inside source files.
+# Values marked "null" or with a comment "# TBD" are intentional placeholders
+# to be filled in during the corresponding development phase.
+# ─────────────────────────────────────────────────────────────────────────────
+
+project:
+  name: StellarX-StarNav-AI
+  version: "0.1.0"
+  team: StellarX
+  description: >
+    Neural-network-based star pattern recognition
+    for autonomous spacecraft navigation.
+
+# ── Data paths ────────────────────────────────────────────────────────────────
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  catalog_dir: data/catalog
+  # Expected image format for star-field inputs (to be confirmed)
+  image_format: null           # e.g. "fits" | "png" | "tiff"  — TBD
+  image_size: null             # [height, width]                — TBD
+
+# ── Preprocessing ─────────────────────────────────────────────────────────────
+preprocessing:
+  noise_reduction: null        # algorithm choice              — TBD
+  normalization: null          # method (e.g. min-max, z-score) — TBD
+  background_subtraction: null # boolean / method              — TBD
+
+# ── Star detection ────────────────────────────────────────────────────────────
+star_detection:
+  min_brightness: null         # intensity threshold           — TBD
+  min_area_px: null            # minimum blob area in pixels   — TBD
+  max_stars: null              # cap on stars extracted/frame  — TBD
+
+# ── Model ─────────────────────────────────────────────────────────────────────
+model:
+  architecture: null           # e.g. "cnn" | "transformer"   — TBD
+  input_channels: null         # grayscale=1, RGB=3            — TBD
+  output_classes: null         # number of recognisable patterns — TBD
+  checkpoint_dir: models
+  checkpoint_name: null        # filename for saved weights    — TBD
+
+# ── Training ──────────────────────────────────────────────────────────────────
+training:
+  batch_size: null             # TBD
+  epochs: null                 # TBD
+  learning_rate: null          # TBD
+  optimizer: null              # e.g. "adam" | "sgd"          — TBD
+  lr_scheduler: null           # e.g. "cosine" | "step"       — TBD
+  weight_decay: null           # TBD
+  seed: 42                     # fixed for reproducibility
+  device: null                 # "cpu" | "cuda" | "mps"       — auto-detected at runtime
+
+# ── Evaluation ────────────────────────────────────────────────────────────────
+evaluation:
+  confidence_threshold: null   # minimum confidence for accepted match — TBD
+  top_k: null                  # top-k accuracy metric k value         — TBD
+
+# ── Navigation ────────────────────────────────────────────────────────────────
+navigation:
+  attitude_method: null        # estimation algorithm          — TBD
+  position_method: null        # estimation algorithm (if applicable) — TBD
+
+# ── Application (Streamlit) ───────────────────────────────────────────────────
+application:
+  host: "localhost"
+  port: 8501
+  title: "StellarX — Star Pattern Recognition"
+  debug: false
