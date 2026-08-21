@@ -26,16 +26,18 @@ from __future__ import annotations
 
 from typing import Any
 
-import torch
-import torch.nn as nn
+
+# NOTE: torch is imported lazily inside methods so this module can be imported
+# without PyTorch installed (Phase 1 / Phase 2 work does not require it).
+# Phase 3 will add the concrete architecture and require torch at runtime.
 
 
-class StarPatternModel(nn.Module):
+class StarPatternModel:
     """Neural network model for star pattern recognition.
 
     This class is a placeholder.  The architecture body will be implemented
     during Phase 3 once the input feature representation and output schema
-    have been finalised.
+    have been finalised.  It will then subclass ``torch.nn.Module``.
 
     Parameters
     ----------
@@ -47,14 +49,14 @@ class StarPatternModel(nn.Module):
     """
 
     def __init__(self, config: dict) -> None:
-        super().__init__()
         self.config = config
 
-        # TODO (Phase 3): define all layer groups here.
-        #   Structure the model using nn.Sequential or named sub-modules
-        #   so that individual components can be analysed and swapped.
+        # TODO (Phase 3): import torch and torch.nn here, define all layer
+        #   groups, and make this class subclass torch.nn.Module.
         #
         #   Example skeleton (to be replaced):
+        #     import torch.nn as nn
+        #     super().__init__()
         #     self.backbone = ...
         #     self.classifier = ...
         raise NotImplementedError(
@@ -62,13 +64,14 @@ class StarPatternModel(nn.Module):
             "Implementation is planned for Phase 3."
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         """Run a forward pass through the network.
 
         Parameters
         ----------
         x:
-            Input feature tensor.  Shape is TBD pending feature design.
+            Input feature tensor (torch.Tensor).  Shape is TBD pending
+            feature design (Phase 3).
 
         Returns
         -------

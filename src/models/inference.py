@@ -15,18 +15,17 @@ Implementation note
 -------------------
 This module must not contain any training logic.  It is the production-facing
 inference interface used by the navigation pipeline and the Streamlit app.
+
+PyTorch is imported lazily inside each function so that the module can be
+imported and inspected without PyTorch being installed (Phase 1 requirement).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
-import torch
-
-from src.models.star_pattern_model import StarPatternModel
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +61,7 @@ class RecognitionResult:
 # ---------------------------------------------------------------------------
 
 
-def load_model(checkpoint_path: str | Path, config: dict) -> StarPatternModel:
+def load_model(checkpoint_path: str | Path, config: dict):
     """Load a trained model from a checkpoint file.
 
     Parameters
@@ -86,14 +85,15 @@ def load_model(checkpoint_path: str | Path, config: dict) -> StarPatternModel:
     """
     # TODO (Phase 3): implement checkpoint loading.
     #   Steps:
-    #     1. build_model(config)
-    #     2. model.load_state_dict(torch.load(checkpoint_path, map_location=...))
-    #     3. model.eval()
+    #     1. import torch  (lazy — only needed at runtime)
+    #     2. from src.models.star_pattern_model import build_model
+    #     3. model.load_state_dict(torch.load(checkpoint_path, map_location=...))
+    #     4. model.eval()
     raise NotImplementedError("load_model is not yet implemented.")
 
 
 def run_inference(
-    model: StarPatternModel,
+    model,
     features: np.ndarray,
     config: dict,
 ) -> RecognitionResult:
@@ -121,9 +121,10 @@ def run_inference(
     """
     # TODO (Phase 3): implement inference.
     #   Steps:
-    #     1. Convert features to torch.Tensor.
-    #     2. Run model.forward() inside torch.no_grad().
-    #     3. Apply softmax / sigmoid for confidence scores.
-    #     4. Apply confidence threshold from config.
-    #     5. Return RecognitionResult.
+    #     1. import torch  (lazy — only needed at runtime)
+    #     2. Convert features to torch.Tensor.
+    #     3. Run model.forward() inside torch.no_grad().
+    #     4. Apply softmax / sigmoid for confidence scores.
+    #     5. Apply confidence threshold from config.
+    #     6. Return RecognitionResult.
     raise NotImplementedError("run_inference is not yet implemented.")

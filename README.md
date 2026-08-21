@@ -1,7 +1,7 @@
 # StellarX — AI-Powered Star Pattern Recognition for Autonomous Spacecraft Navigation
 
 > **Team:** StellarX
-> **Status:** 🚧 Early development — repository foundation established; implementation is planned in subsequent phases.
+> **Status:** 🔬 Phase 1 complete — synthetic data pipeline implemented and tested. Phase 2 (Star Detection) is next.
 
 ---
 
@@ -19,7 +19,7 @@ The invention underlying this project describes a system that:
 - Reduces computational complexity and resource consumption compared to conventional methods
 - Targets resource-constrained platforms such as CubeSats and small satellites
 
-> **Note:** The descriptions above reflect the proposed system as described in the related invention. No features have been implemented yet. This repository is being prepared as the engineering foundation for the planned implementation phases described below.
+> **Note:** The descriptions above reflect the proposed system as described in the related invention. Phase 1 (dataset pipeline) is now complete; subsequent phases will implement the detection, recognition, and navigation components.
 
 ---
 
@@ -82,19 +82,27 @@ Each stage is a distinct, independently testable component. The pipeline is desi
 
 ## Planned Development Phases
 
-### Phase 1 — Foundation
-- Repository architecture and project scaffolding *(current phase)*
-- Dataset sourcing and preparation
-- Preprocessing pipeline design
+### Phase 1 — Foundation ✅ Complete
+- Repository architecture and project scaffolding
+- Hipparcos bright-star catalog integrated (`data/catalog/hipparcos_bright.csv`)
+- Synthetic star-field generator implemented (`src/preprocessing/star_field_generator.py`)
+- Dataset builder with reproducible 800/100/100 train/val/test splits (`src/preprocessing/dataset_builder.py`)
+- 16-bit PNG image I/O implemented (`src/preprocessing/image_preprocessing.py`)
+- Full catalog loader with spatial and magnitude queries (`src/catalog/catalog_loader.py`)
+- Ground-truth metadata schema defined and validated
+- Unit test suites: ~100 real assertions across 4 test modules
+- Exploratory notebook `notebooks/01_data_exploration.ipynb` fully executable
+- `docs/dataset.md` fully documented with source, schema, methodology, limitations
 
-### Phase 2 — Star Detection
-- Star-field image preprocessing implementation
-- Star detection algorithm
+### Phase 2 — Star Detection *(next)*
+- Background estimation and subtraction
+- Star detection algorithm (blob detection or matched filter)
+- Sub-pixel centroiding
 - Feature extraction from detected stars
 
 ### Phase 3 — Neural Network
-- Training data generation
-- Neural network model design and development
+- Training data generation from synthetic pipeline
+- Neural network architecture design and development
 - Model training and evaluation
 
 ### Phase 4 — Pattern Recognition
@@ -103,7 +111,7 @@ Each stage is a distinct, independently testable component. The pipeline is desi
 - Confidence estimation for recognition outputs
 
 ### Phase 5 — Navigation
-- Spacecraft attitude estimation from recognized patterns
+- Spacecraft attitude estimation from recognised patterns
 - Position estimation where applicable
 - Navigation output formatting
 
@@ -160,23 +168,50 @@ StellarX-StarNav-AI/
 
 ## Technology Stack
 
-The following technologies are planned for this project. None have been fully integrated yet — selection is subject to revision during implementation.
-
 | Technology | Role | Status |
 |---|---|---|
-| Python 3.11+ | Primary language | Planned |
-| NumPy | Numerical arrays and computation | Planned |
-| OpenCV | Image processing and star detection | Planned |
-| Pandas | Data handling and catalog operations | Planned |
-| PyTorch | Deep learning framework | Planned |
-| Scikit-learn | ML utilities, metrics, preprocessing helpers | Planned |
-| Matplotlib | Visualization and result plotting | Planned |
-| Streamlit | Interactive demonstration interface | Planned |
-| PyYAML | Configuration management | Planned |
+| Python 3.11+ | Primary language | ✅ In use |
+| NumPy | Numerical arrays and computation | ✅ In use |
+| Pandas | Data handling and catalog operations | ✅ In use |
+| SciPy | Gaussian PSF, image convolution | ✅ In use |
+| Pillow | 16-bit PNG image I/O | ✅ In use |
+| Matplotlib | Visualization and result plotting | ✅ In use |
+| PyYAML | Configuration management | ✅ In use |
+| pytest | Unit testing | ✅ In use |
+| OpenCV | Star detection (Phase 2) | Planned |
+| PyTorch | Deep learning framework (Phase 3) | Planned |
+| Scikit-learn | ML utilities and metrics (Phase 3+) | Planned |
+| Streamlit | Interactive demonstration interface (Phase 7) | Planned |
 
 ---
 
-## Research and Engineering Goals
+## Quick Start — Generate the Dataset
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Generate the full synthetic dataset (800 train / 100 val / 100 test)
+python -c "
+import yaml
+from src.preprocessing.dataset_builder import build_dataset
+with open('config.yaml') as f:
+    config = yaml.safe_load(f)
+build_dataset(config)
+"
+
+# 3. Run the unit tests
+pytest tests/ -v
+
+# 4. Explore the data
+jupyter notebook notebooks/01_data_exploration.ipynb
+```
+
+> Generated images are saved to `data/raw/` and are **not committed** to the repository (see `.gitignore`).
+
+---
+
+
 
 The project will be evaluated against the following targets, to be defined concretely during implementation:
 
@@ -218,6 +253,6 @@ Detailed documentation is located in the [`docs/`](docs/) directory:
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | Planned system architecture and component diagram |
 | [`docs/methodology.md`](docs/methodology.md) | Intended methodology for each pipeline stage |
-| [`docs/dataset.md`](docs/dataset.md) | Dataset requirements and preparation plan |
+| [`docs/dataset.md`](docs/dataset.md) | Catalog source, synthetic generation methodology, metadata schema |
 | [`docs/experiments.md`](docs/experiments.md) | Experiment tracking template |
 | [`docs/results.md`](docs/results.md) | Results reporting template |

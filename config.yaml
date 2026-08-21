@@ -20,9 +20,9 @@ data:
   raw_dir: data/raw
   processed_dir: data/processed
   catalog_dir: data/catalog
-  # Expected image format for star-field inputs (to be confirmed)
-  image_format: null           # e.g. "fits" | "png" | "tiff"  — TBD
-  image_size: null             # [height, width]                — TBD
+  # Image format for star-field inputs (decided in Phase 1)
+  image_format: png            # lossless PNG; FITS support planned for Phase 2
+  image_size: [512, 512]       # [height, width] in pixels
 
 # ── Preprocessing ─────────────────────────────────────────────────────────────
 preprocessing:
@@ -64,6 +64,44 @@ evaluation:
 navigation:
   attitude_method: null        # estimation algorithm          — TBD
   position_method: null        # estimation algorithm (if applicable) — TBD
+
+# ── Dataset generation (Phase 1) ──────────────────────────────────────────────
+dataset:
+  # Catalog
+  catalog_file: data/catalog/hipparcos_bright.csv   # path to star catalog CSV
+  catalog_mag_limit: 6.5                            # faint magnitude cutoff (inclusive)
+
+  # Synthetic image dimensions
+  image_width: 512                                  # pixels
+  image_height: 512                                 # pixels
+
+  # Simulated sensor / optics
+  field_of_view_deg: 20.0                           # full field of view in degrees
+  # focal_length_mm is derived from image_size and fov; not set independently here
+
+  # Star rendering
+  max_stars_per_image: 30                           # cap on stars rendered per frame
+  psf_sigma_px: 1.5                                 # Gaussian PSF sigma in pixels
+  min_star_flux: 0.05                               # minimum normalised flux (faintest rendered star)
+
+  # Background and noise
+  background_level: 0.02                            # mean background as fraction of max intensity
+  read_noise_sigma: 0.005                           # Gaussian read-noise sigma (fraction of max)
+  shot_noise: true                                  # apply Poisson-like shot noise to star flux
+
+  # Random artifacts (hot pixels, cosmic rays)
+  artifact_probability: 0.01                        # probability of a random artifact per image
+
+  # Dataset size and splitting
+  num_train: 800
+  num_val: 100
+  num_test: 100
+  random_seed: 42                                   # global seed for reproducibility
+
+  # Output
+  output_dir: data/raw                              # generated images saved here
+  metadata_file: data/raw/metadata.json             # ground-truth metadata for all samples
+  image_format: png                                 # "png" | "tiff"  (lossless)
 
 # ── Application (Streamlit) ───────────────────────────────────────────────────
 application:

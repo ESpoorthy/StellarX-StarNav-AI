@@ -70,18 +70,21 @@ def preprocessing_config() -> dict:
 class TestLoadImage:
     """Tests for image_preprocessing.load_image."""
 
-    def test_raises_not_implemented(self, tmp_path):
-        """load_image should raise NotImplementedError until Phase 2."""
+    def test_raises_file_not_found_for_missing_png(self, tmp_path):
+        """load_image should raise FileNotFoundError for a missing file."""
         from src.preprocessing.image_preprocessing import load_image
 
-        with pytest.raises(NotImplementedError):
-            load_image(tmp_path / "nonexistent.fits")
+        with pytest.raises(FileNotFoundError):
+            load_image(tmp_path / "nonexistent.png")
 
-    # TODO (Phase 2): add tests for:
-    #   - successful loading of a valid image file
-    #   - FileNotFoundError on missing path
-    #   - correct output dtype (float32)
-    #   - correct output shape (2-D)
+    def test_raises_value_error_for_unsupported_format(self, tmp_path):
+        """load_image should raise ValueError for JPEG (unsupported format)."""
+        from src.preprocessing.image_preprocessing import load_image
+
+        bad = tmp_path / "image.jpg"
+        bad.write_bytes(b"\xff\xd8\xff")   # JPEG magic bytes
+        with pytest.raises(ValueError, match="Unsupported"):
+            load_image(bad)
 
 
 class TestSubtractBackground:

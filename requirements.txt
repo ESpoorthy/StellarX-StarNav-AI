@@ -6,10 +6,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Numerical computing
-numpy>=1.26,<2.0
+numpy>=1.26
 
 # Data handling
-pandas>=2.2,<3.0
+pandas>=2.0
 
 # Computer vision / image processing
 opencv-python>=4.9,<5.0
@@ -17,19 +17,25 @@ opencv-python>=4.9,<5.0
 # Plotting and visualization
 matplotlib>=3.8,<4.0
 
+# Scientific computing (Gaussian PSF, image convolution for star-field generation)
+scipy>=1.11
+
 # Machine-learning utilities (metrics, preprocessing helpers)
 scikit-learn>=1.4,<2.0
 
 # Deep learning framework — PyTorch
 # (CPU-only build; swap for torch with CUDA extras for GPU training)
-torch>=2.2,<3.0
-torchvision>=0.17,<1.0
+# torch>=2.2,<3.0        # install separately: pip install torch
+# torchvision>=0.17,<1.0 # install separately: pip install torchvision
 
 # Configuration management
 pyyaml>=6.0,<7.0
 
 # Interactive web application
 streamlit>=1.35,<2.0
+
+# Image I/O (PNG/TIFF read-write without OpenCV overhead)
+Pillow>=10.0
 
 # Testing
 pytest>=8.0,<9.0
