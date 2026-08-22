@@ -58,29 +58,55 @@ star_detection:
   centroid_method: intensity_weighted   # "intensity_weighted" | "peak"
   centroid_half_window: 5               # half-size of centroiding window (pixels)
 
-# ── Model ─────────────────────────────────────────────────────────────────────
+
+# ── Feature extraction (Phase 3) ──────────────────────────────────────────────
+features:
+  # Number of brightest stars used to build the feature vector
+  max_stars: 10
+  # Descriptor type (pairwise_distances | pairwise_distances_and_ratios)
+  descriptor: pairwise_distances_and_ratios
+  # Image dimensions used for normalisation (must match dataset.image_width/height)
+  image_width: 512
+  image_height: 512
+
+# ── Model (Phase 3 — scikit-learn classifier) ────────────────────────────────
 model:
-  architecture: null           # e.g. "cnn" | "transformer"   — TBD
-  input_channels: null         # grayscale=1, RGB=3            — TBD
-  output_classes: null         # number of recognisable patterns — TBD
+  # Backend: "sklearn" is active for Phase 3; "pytorch" is planned for Phase 4+
+  backend: sklearn
+  # Sklearn classifier type: "random_forest" | "knn" | "mlp"
+  classifier_type: random_forest
+  # RandomForest hyperparameters
+  n_estimators: 200
+  max_depth: null                # null = unlimited
+  # KNN hyperparameters
+  n_neighbors: 5
+  # MLP hyperparameters (hidden layer sizes as a list)
+  mlp_hidden_layers: [256, 128]
+  # Output
   checkpoint_dir: models
-  checkpoint_name: null        # filename for saved weights    — TBD
+  checkpoint_name: star_pattern_classifier.pkl
+  # PyTorch architecture (deferred — Python 3.14 not yet supported by torch)
+  architecture: null             # TBD when PyTorch supports Python 3.14
+  input_channels: null           # TBD
+  output_classes: null           # TBD — set automatically from catalog size
 
-# ── Training ──────────────────────────────────────────────────────────────────
+# ── Training (Phase 3) ────────────────────────────────────────────────────────
 training:
-  batch_size: null             # TBD
-  epochs: null                 # TBD
-  learning_rate: null          # TBD
-  optimizer: null              # e.g. "adam" | "sgd"          — TBD
-  lr_scheduler: null           # e.g. "cosine" | "step"       — TBD
-  weight_decay: null           # TBD
-  seed: 42                     # fixed for reproducibility
-  device: null                 # "cpu" | "cuda" | "mps"       — auto-detected at runtime
+  # Sklearn does not use mini-batch gradient descent; these apply to the
+  # PyTorch path when it becomes available
+  batch_size: null               # PyTorch TBD
+  epochs: null                   # PyTorch TBD
+  learning_rate: null            # PyTorch TBD
+  optimizer: null                # PyTorch TBD
+  lr_scheduler: null             # PyTorch TBD
+  weight_decay: null             # PyTorch TBD
+  seed: 42                       # fixed for reproducibility (used in sklearn too)
+  device: null                   # auto-detected at runtime for PyTorch
 
-# ── Evaluation ────────────────────────────────────────────────────────────────
+# ── Evaluation (Phase 3) ─────────────────────────────────────────────────────
 evaluation:
-  confidence_threshold: null   # minimum confidence for accepted match — TBD
-  top_k: null                  # top-k accuracy metric k value         — TBD
+  confidence_threshold: 0.3      # minimum probability for an accepted prediction
+  top_k: 3                       # top-k accuracy metric
 
 # ── Navigation ────────────────────────────────────────────────────────────────
 navigation:

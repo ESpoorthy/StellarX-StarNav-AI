@@ -333,35 +333,110 @@ def extract_features(
     stars: list[StarCandidate],
     config: dict,
 ) -> np.ndarray:
-    """Extract a feature representation from detected stars for the neural network.
+    """Extract a fixed-length feature vector from a list of detected stars.
 
-    Phase 3 stub — not yet implemented.
+    Phase 3 implementation — pairwise angular distances and brightness ratios.
 
-    The feature representation design (inter-star angular distances,
-    brightness ratios, geometric descriptors) will be defined in Phase 3
-    after the detection pipeline has been validated end-to-end.
+    Feature design
+    --------------
+    Stars are first sorted by descending brightness, then capped at
+    ``config["features"]["max_stars"]`` (default 10).  From the top-N stars
+    two descriptor groups are computed:
+
+    **Pairwise pixel distances** (normalised by image diagonal):
+
+        d_ij = sqrt((x_i - x_j)^2 + (y_i - y_j)^2) / diagonal
+
+    for all pairs (i, j), i < j.  Normalising by the image diagonal makes
+    the descriptor independent of image resolution.
+
+    **Pairwise brightness ratios** (only if
+    ``descriptor == "pairwise_distances_and_ratios"``):
+
+        r_ij = brightness_i / (brightness_i + brightness_j)
+
+    The ratio is in (0, 1) and is symmetric in the sense that
+    r_ij + r_ji = 1, so only the upper-triangle pair (i < j) is stored.
+    Using the sum-normalised ratio rather than a raw quotient avoids
+    division-by-zero and keeps the range bounded.
+
+    If fewer than 2 stars are detected the descriptor is padded with zeros
+    to the expected fixed length so that the classifier always receives a
+    consistent input shape.
+
+    Fixed output length
+    -------------------
+    For N = max_stars, there are N*(N-1)/2 pairs.
+    - distances only:            N*(N-1)/2 features
+    - distances + ratios:    2 * N*(N-1)/2 features
+
+    With N=10: 45 distance features + 45 ratio features = 90 features total.
+
+    Scientific basis
+    ----------------
+    Pairwise angular/pixel distances between stars are the core of most
+    classical star-identification algorithms (Groth 1986, Mortari 2004).
+    They are invariant to rotation and scale (after normalisation) and
+    provide strong discrimination between different star patterns.
+    Brightness ratios add photometric discrimination, which helps when two
+    patterns have similar geometric arrangements.
 
     Parameters
     ----------
     stars:
-        List of :class:`StarCandidate` objects from :func:`detect_stars`.
+        List of :class:`StarCandidate` objects from :func:`detect_stars`,
+        sorted by descending brightness.
     config:
-        Feature-extraction configuration dict.
+        Feature-extraction configuration dict.  Reads from the ``features``
+        sub-dict (keys: ``max_stars``, ``descriptor``,
+        ``image_width``, ``image_height``).
 
     Returns
     -------
     np.ndarray
-        Feature array.  Shape is TBD (Phase 3).
-
-    Raises
-    ------
-    NotImplementedError
-        Until Phase 3 implementation.
+        1-D float32 feature vector of fixed length
+        ``2 * max_stars*(max_stars-1)/2`` (distances + ratios) or
+        ``max_stars*(max_stars-1)/2`` (distances only).
+        Returns a zero vector if fewer than 2 stars are detected.
     """
-    # TODO (Phase 3): design and implement feature extraction.
-    #   Candidates:
-    #   - Pairwise angular distances between star centroids (normalised by FoV)
-    #   - Brightness ratios between pairs / triplets
-    #   - Geometric descriptors (triangle side ratios, polygon angles)
-    #   - Normalised (x, y) positions within the image frame
-    raise NotImplementedError("extract_features is not yet implemented (Phase 3).")
+    feat_cfg = config.get("features", {})
+    max_n    = int(feat_cfg.get("max_stars", 10))
+    descriptor = feat_cfg.get("descriptor", "pairwise_distances_and_ratios")
+    img_w    = float(feat_cfg.get("image_width",  config.get("dataset", {}).get("image_width",  512)))
+    img_h    = float(feat_cfg.get("image_height", config.get("dataset", {}).get("image_height", 512)))
+    diagonal = math.sqrt(img_w ** 2 + img_h ** 2)
+
+    n_pairs = max_n * (max_n - 1) // 2
+    use_ratios = (descriptor == "pairwise_distances_and_ratios")
+    feat_len = 2 * n_pairs if use_ratios else n_pairs
+
+    # Select top-N stars by brightness (already sorted descending by detect_stars)
+    top = stars[:max_n]
+
+    if len(top) < 2:
+        return np.zeros(feat_len, dtype=np.float32)
+
+    # Pad with zero-brightness sentinels so indexing is uniform
+    while len(top) < max_n:
+        top = top + [StarCandidate(x=0.0, y=0.0, brightness=0.0)]
+
+    # Build pairwise descriptors
+    distances = np.zeros(n_pairs, dtype=np.float32)
+    ratios    = np.zeros(n_pairs, dtype=np.float32)
+
+    k = 0
+    for i in range(max_n):
+        for j in range(i + 1, max_n):
+            dx = top[i].x - top[j].x
+            dy = top[i].y - top[j].y
+            distances[k] = math.sqrt(dx * dx + dy * dy) / diagonal
+
+            bi = top[i].brightness
+            bj = top[j].brightness
+            total = bi + bj
+            ratios[k] = bi / total if total > 0 else 0.5
+            k += 1
+
+    if use_ratios:
+        return np.concatenate([distances, ratios]).astype(np.float32)
+    return distances

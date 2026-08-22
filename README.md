@@ -1,7 +1,7 @@
 # StellarX — AI-Powered Star Pattern Recognition for Autonomous Spacecraft Navigation
 
 > **Team:** StellarX
-> **Status:** 🔬 Phase 1 complete — synthetic data pipeline implemented and tested. Phase 2 (Star Detection) is next.
+> **Status:** 🔬 Phase 3 complete — feature extraction, pattern classification, and inference pipeline implemented. Phase 4 (Catalog Matching) is next.
 
 ---
 
@@ -94,18 +94,18 @@ Each stage is a distinct, independently testable component. The pipeline is desi
 - Exploratory notebook `notebooks/01_data_exploration.ipynb` fully executable
 - `docs/dataset.md` fully documented with source, schema, methodology, limitations
 
-### Phase 2 — Star Detection *(next)*
+### Phase 2 — Star Detection ✅ Complete
 - Background estimation and subtraction
 - Star detection algorithm (blob detection or matched filter)
 - Sub-pixel centroiding
 - Feature extraction from detected stars
 
-### Phase 3 — Neural Network
+### Phase 3 — Neural Network ✅ Complete
 - Training data generation from synthetic pipeline
 - Neural network architecture design and development
 - Model training and evaluation
 
-### Phase 4 — Pattern Recognition
+### Phase 4 — Pattern Recognition *(next)*
 - Star pattern identification
 - Star catalog integration
 - Confidence estimation for recognition outputs

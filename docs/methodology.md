@@ -276,3 +276,100 @@ Numerical targets for each metric will be established once baseline measurements
 | Attitude estimation algorithm | 5 | |
 | Position estimation feasibility | 5 | |
 | Inference optimisation strategy | 6 | |
+
+---
+
+## Phase 3 Decisions (implemented)
+
+### 4. Feature Extraction — IMPLEMENTED
+
+**Algorithm: Pairwise pixel distances + brightness ratios**
+
+Config key: `features.descriptor: pairwise_distances_and_ratios`
+Config key: `features.max_stars: 10`
+
+Stars are sorted by descending brightness and the top N = 10 are used. For every pair (i, j) with i < j, two descriptors are computed:
+
+**Pairwise distance:**
+```
+d_ij = sqrt((x_i - x_j)^2 + (y_i - y_j)^2) / image_diagonal
+```
+Normalising by the image diagonal makes the descriptor resolution-independent.
+
+**Brightness ratio:**
+```
+r_ij = brightness_i / (brightness_i + brightness_j)
+```
+Sum-normalised to keep the range in (0, 1) and avoid division-by-zero.
+
+For N = 10 stars: N*(N-1)/2 = 45 pairs → **90 features total** (45 distances + 45 ratios).
+
+Frames with fewer than 2 detected stars return a zero vector of the correct length. This is intentional — the classifier learns to handle sparse frames.
+
+**Scientific basis:** Pairwise angular/pixel distances are the core of classical star-identification algorithms (Groth 1986, Mortari 2004). They are invariant to rotation and scale after normalisation, providing strong discrimination between sky regions.
+
+### 5. Neural Network / Classification — IMPLEMENTED (sklearn backend)
+
+**Decision: scikit-learn RandomForest classifier (Phase 3 active backend)**
+
+PyTorch is not available on Python 3.14 (no compatible wheel as of August 2026). The `StarPatternClassifier` in `src/models/sklearn_classifier.py` provides a fully working classifier with three backend options:
+
+| Backend | Config key | Notes |
+|---|---|---|
+| RandomForest | `classifier_type: random_forest` | **Active default.** n_estimators=200, provides probability estimates. |
+| KNN | `classifier_type: knn` | n_neighbors=5. No training phase. |
+| MLP | `classifier_type: mlp` | hidden_layers=[256, 128]. Requires more data. |
+
+The PyTorch `StarPatternModel` stub in `star_pattern_model.py` is preserved and will be activated when a Python 3.14 compatible wheel is published.
+
+### Sky Tessellation (classification target)
+
+The classification target is a **sky-cell label** — a discretised identifier for the boresight sky region. The sky is divided using a cylindrical equal-area grid:
+
+```
+n_dec = sqrt(n_sky_cells / 2)
+n_ra  = n_sky_cells / n_dec
+label = ra_bin * n_dec + dec_bin
+```
+
+Config key: `model.n_sky_cells: 500` (target cell count; actual = n_ra × n_dec).
+
+This maps the attitude estimation problem to a classification problem: recognising which sky region the camera is pointing at, then using the catalog to recover the precise attitude.
+
+### Inference Interface
+
+`run_inference(model, features, config) → RecognitionResult` dispatches to the active backend. The `RecognitionResult` dataclass provides:
+- `pattern_id` — sky-cell label string (`"cell_N"`) or `None` if below confidence threshold
+- `confidence` — predicted class probability in [0, 1]
+- `raw_output` — full probability vector
+- `latency_ms` — wall-clock inference time
+- `top_k_predictions` — ranked list of (pattern_id, probability) pairs
+
+Config key: `evaluation.confidence_threshold: 0.3`
+Config key: `evaluation.top_k: 3`
+
+### Updated Evaluation Metrics Table
+
+| Stage | Metric | Phase 3 value |
+|---|---|---|
+| Star detection | Detection rate | See notebook 02 |
+| Star detection | False positives/image | See notebook 02 |
+| Centroiding | Mean centroid error | < 0.15 px (noiseless synthetic) |
+| Feature extraction | Feature dim | 90 (N=10, distances+ratios) |
+| Classification | Top-1 accuracy | See notebook 03 (sparse catalog limited) |
+| Classification | Top-k accuracy | See notebook 03 |
+| Classification | Inference latency | < 5 ms (single sample, sklearn RF, CPU) |
+| Catalog matching | Match rate | TBD (Phase 4) |
+| Attitude estimation | Mean angular error | TBD (Phase 5) |
+
+### Updated Open Decisions
+
+| Decision | Phase | Status |
+|---|---|---|
+| Feature representation | 3 | ✅ Pairwise distances + ratios (90-dim) |
+| Classification backend | 3 | ✅ sklearn RF (PyTorch deferred to Python ≤3.12) |
+| Star catalog extension | 3/4 | ⬜ Full Hipparcos needed before Phase 4 |
+| Catalog matching algorithm | 4 | ⬜ Planned |
+| Attitude estimation algorithm | 5 | ⬜ Planned |
+| Position estimation feasibility | 5 | ⬜ Planned |
+| Inference optimisation | 6 | ⬜ Planned |

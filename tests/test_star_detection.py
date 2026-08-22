@@ -683,17 +683,145 @@ def _preprocess_array(image: np.ndarray) -> np.ndarray:
 
 
 # ===========================================================================
-# extract_features  — Phase 3 stub
+# extract_features  (Phase 3 — implemented)
 # ===========================================================================
+
+# Feature config matching config.yaml values
+FEATURE_CONFIG = {
+    "features": {
+        "max_stars":    10,
+        "descriptor":   "pairwise_distances_and_ratios",
+        "image_width":  128,
+        "image_height": 128,
+    }
+}
+
+_MAX_N      = 10
+_N_PAIRS    = _MAX_N * (_MAX_N - 1) // 2   # 45
+_FEAT_DIM   = 2 * _N_PAIRS                  # 90
+
 
 class TestExtractFeatures:
 
-    def test_raises_not_implemented_phase3(self):
-        with pytest.raises(NotImplementedError):
-            extract_features([], DETECTION_CONFIG)
-
-    def test_raises_not_implemented_with_stars(self, star_image):
+    def test_returns_ndarray(self, star_image):
         img, _ = star_image
         stars = detect_stars(img, DETECTION_CONFIG)
-        with pytest.raises(NotImplementedError):
-            extract_features(stars, DETECTION_CONFIG)
+        feat = extract_features(stars, FEATURE_CONFIG)
+        assert isinstance(feat, np.ndarray)
+
+    def test_output_dtype_float32(self, star_image):
+        img, _ = star_image
+        stars = detect_stars(img, DETECTION_CONFIG)
+        feat = extract_features(stars, FEATURE_CONFIG)
+        assert feat.dtype == np.float32
+
+    def test_output_length_distances_and_ratios(self, star_image):
+        """With max_stars=10 and distances+ratios: 2*45 = 90 features."""
+        img, _ = star_image
+        stars = detect_stars(img, DETECTION_CONFIG)
+        feat = extract_features(stars, FEATURE_CONFIG)
+        assert feat.shape == (_FEAT_DIM,), (
+            f"Expected ({_FEAT_DIM},), got {feat.shape}"
+        )
+
+    def test_output_length_distances_only(self, star_image):
+        """With descriptor=pairwise_distances: 45 features."""
+        img, _ = star_image
+        stars = detect_stars(img, DETECTION_CONFIG)
+        cfg = {
+            "features": {
+                **FEATURE_CONFIG["features"],
+                "descriptor": "pairwise_distances",
+            }
+        }
+        feat = extract_features(stars, cfg)
+        assert feat.shape == (_N_PAIRS,)
+
+    def test_empty_star_list_returns_zero_vector(self):
+        """No detections → zero feature vector of correct length."""
+        feat = extract_features([], FEATURE_CONFIG)
+        assert feat.shape == (_FEAT_DIM,)
+        assert np.all(feat == 0.0)
+
+    def test_single_star_returns_zero_vector(self, single_star_image):
+        """Only 1 star → can't form pairs → zero vector."""
+        img, _ = single_star_image
+        stars = detect_stars(img, {**DETECTION_CONFIG, "max_stars": 1})
+        stars = stars[:1]   # force single star
+        feat = extract_features(stars, FEATURE_CONFIG)
+        assert feat.shape == (_FEAT_DIM,)
+        assert np.all(feat == 0.0)
+
+    def test_distances_in_zero_one_range(self, star_image):
+        """Normalised distances must be in [0, 1]."""
+        img, _ = star_image
+        stars = detect_stars(img, DETECTION_CONFIG)
+        feat = extract_features(stars, FEATURE_CONFIG)
+        distances = feat[:_N_PAIRS]
+        assert distances.min() >= 0.0
+        assert distances.max() <= 1.0 + 1e-6
+
+    def test_ratios_in_zero_one_range(self, star_image):
+        """Brightness ratios must be in (0, 1)."""
+        img, _ = star_image
+        stars = detect_stars(img, DETECTION_CONFIG)
+        feat = extract_features(stars, FEATURE_CONFIG)
+        ratios = feat[_N_PAIRS:]
+        for r in ratios[ratios > 0]:
+            assert 0.0 < r <= 1.0, f"Ratio {r} out of (0, 1]"
+
+    def test_deterministic_same_stars(self, star_image):
+        """Same star list → identical feature vector."""
+        img, _ = star_image
+        stars = detect_stars(img, DETECTION_CONFIG)
+        f1 = extract_features(stars, FEATURE_CONFIG)
+        f2 = extract_features(stars, FEATURE_CONFIG)
+        assert np.array_equal(f1, f2)
+
+    def test_different_images_different_features(self):
+        """Two clearly different star patterns must produce different features."""
+        img1, _ = _make_star_image(
+            stars=[(20.0, 20.0, 1.0), (40.0, 40.0, 0.5)], noise_sigma=0.0
+        )
+        img2, _ = _make_star_image(
+            stars=[(100.0, 100.0, 1.0), (110.0, 110.0, 0.5)], noise_sigma=0.0
+        )
+        s1 = detect_stars(img1, DETECTION_CONFIG)
+        s2 = detect_stars(img2, DETECTION_CONFIG)
+        f1 = extract_features(s1, FEATURE_CONFIG)
+        f2 = extract_features(s2, FEATURE_CONFIG)
+        assert not np.array_equal(f1, f2)
+
+    def test_max_stars_cap_applied(self):
+        """Only top max_stars=2 are used regardless of how many are detected."""
+        img, _ = _make_star_image(
+            stars=[(20.0, 20.0, 1.0), (50.0, 50.0, 0.8), (90.0, 90.0, 0.6)],
+            noise_sigma=0.0,
+        )
+        stars_all = detect_stars(img, DETECTION_CONFIG)
+        cfg_2 = {
+            "features": {
+                "max_stars": 2,
+                "descriptor": "pairwise_distances_and_ratios",
+                "image_width": 128, "image_height": 128,
+            }
+        }
+        feat = extract_features(stars_all, cfg_2)
+        # With max_stars=2: 1 pair → 2 features (1 dist + 1 ratio)
+        assert feat.shape == (2,)
+
+    def test_feature_uses_full_config_for_dim(self):
+        """feature_dim is always max_stars*(max_stars-1)/2 * n_groups."""
+        for max_n in [3, 5, 8]:
+            n_p = max_n * (max_n - 1) // 2
+            cfg = {
+                "features": {
+                    "max_stars": max_n,
+                    "descriptor": "pairwise_distances_and_ratios",
+                    "image_width": 128, "image_height": 128,
+                }
+            }
+            feat = extract_features([], cfg)
+            assert feat.shape == (2 * n_p,), (
+                f"max_stars={max_n}: expected ({2*n_p},), got {feat.shape}"
+            )
