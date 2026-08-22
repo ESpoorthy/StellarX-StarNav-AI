@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # StellarX-StarNav-AI — Core Dependencies
-# Python 3.11+
+# Python 3.11+  (torch requires Python <=3.12 — not yet available on 3.14)
 #
 # Install with:  pip install -r requirements.txt
 # ─────────────────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ matplotlib>=3.8,<4.0
 # Scientific computing (Gaussian PSF, image convolution for star-field generation)
 scipy>=1.11
 
-# Machine-learning utilities (metrics, preprocessing helpers)
+# Machine-learning (Phase 3 active classifier: RandomForest/KNN/MLP + metrics)
 scikit-learn>=1.4,<2.0
 
 # Deep learning framework — PyTorch
