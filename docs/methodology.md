@@ -1,208 +1,278 @@
 # Methodology
 
-> **Status:** Intended methodology — implementation decisions are still open.
-> Sections marked **To be determined during implementation** will be completed as each phase progresses.
+> **Living document** — updated as each phase is implemented.
+> Decisions made during implementation replace TBD placeholders.
+> Phase 1 and Phase 2 sections are complete; later sections remain as plans.
 
 ---
 
 ## Overview
 
-This document describes the intended technical approach for each stage of the StellarX-StarNav-AI pipeline. It serves as a living specification that bridges the high-level architecture description and the concrete implementation choices made during development.
+This document describes the technical approach for each stage of the StellarX-StarNav-AI pipeline. It bridges the high-level architecture in `docs/architecture.md` and the concrete implementation choices made during development.
 
 ---
 
 ## 1. Input Star-Field Imagery
 
-The system operates on images of the star field captured by an onboard imaging device. These images are expected to be:
+### Phase 1 decisions
 
-- Greyscale or single-channel intensity images (colour support to be evaluated)
-- Captured under low-light, space-environment conditions
-- Subject to sensor noise, cosmic-ray events, and stray-light artifacts
+The system operates on **synthetic star-field images** generated from the Hipparcos bright-star catalog using a simplified spacecraft star-sensor simulation (see `docs/dataset.md` for full detail).
 
-**Image format and resolution:** To be determined during dataset preparation (Phase 1).
+| Property | Decision |
+|---|---|
+| Format | 16-bit greyscale PNG |
+| Bit depth | 16-bit (uint16, values 0–65535) |
+| Pixel value convention | Loaded as float32 in [0, 1] via `load_image()` |
+| Dimensions | 512 × 512 px (configurable, `dataset.image_width/height`) |
+| Simulation model | Gnomonic projection, Gaussian PSF (σ = 1.5 px), Poisson-approx shot noise, Gaussian read noise |
 
-**Supported input sources:** Real spacecraft imagery, synthetic simulations, or publicly available astronomical datasets — to be determined during Phase 1.
+Real spacecraft imagery (FITS format, `astropy.io.fits`) is planned for Phase 2+. It is not used in the current implementation.
 
 ---
 
 ## 2. Image Preprocessing
 
-The goal of preprocessing is to transform the raw sensor image into a clean, normalised representation suitable for reliable star detection.
+### Phase 2 decisions (implemented)
 
-### 2.1 Background Estimation and Subtraction
+The preprocessing pipeline transforms a raw (synthetic) star-field image into a clean, normalised array ready for star detection. All algorithms are implemented in `src/preprocessing/image_preprocessing.py`. Parameters are sourced from the `preprocessing` section of `config.yaml`.
 
-Space imagery typically contains a slowly varying background illumination component from scattered light, sensor bias, and dark current. A background estimation method will be applied to separate the background from point-source objects.
+The pipeline runs in four steps:
 
-**Algorithm:** To be determined during implementation.
+```
+load_image()
+    ↓
+subtract_background()
+    ↓
+reduce_noise()
+    ↓
+normalise()
+    ↓
+float32 array [0, 1]  →  star detection
+```
 
-### 2.2 Noise Reduction
+### 2.1 Image Loading
 
-Point-spread noise and read noise from the sensor must be suppressed without smearing the point-source star signals.
+`load_image(path)` reads 8-bit or 16-bit greyscale PNG / TIFF files via Pillow and returns a float32 NumPy array normalised to [0, 1]. RGB images are converted to greyscale. JPEG is explicitly rejected because lossy compression corrupts low-level photometric data.
 
-**Algorithm:** To be determined during implementation. Candidates include Gaussian smoothing, median filtering, and wavelet-based denoising.
+### 2.2 Background Subtraction
 
-### 2.3 Intensity Normalisation
+**Algorithm: large-kernel median filter**
 
-Pixel intensities will be normalised to a consistent range to ensure stable neural network input and to allow comparison across images from different sensors or exposures.
+Config key: `preprocessing.background_method: median_filter`  
+Config key: `preprocessing.background_filter_size: 31`
 
-**Method (e.g. min-max, z-score, percentile clipping):** To be determined during implementation.
+A (31 × 31) median filter estimates the slowly-varying background illumination. Subtracting this estimate removes the DC bias and any low-spatial-frequency gradient while leaving compact star blobs intact. The result is clipped to [0, 1].
+
+**Why median filter?** The median is insensitive to compact bright objects (stars), so it estimates the background rather than the scene signal — this is the same principle used in the SExtractor astronomical source extractor.
+
+**Approximation note:** This estimate works well for the Phase 1 synthetic dataset, which has a flat, low background (level ≈ 0.02). For real spacecraft imagery with structured stray-light gradients, a higher-order background mesh or sigma-clipped polynomial fit would be more appropriate.
+
+Alternative supported: `background_method: constant` (subtracts the global median — faster but coarser).
+
+### 2.3 Noise Reduction
+
+**Algorithm: Gaussian smoothing**
+
+Config key: `preprocessing.noise_method: gaussian`  
+Config key: `preprocessing.noise_sigma: 0.8`
+
+A small-sigma (σ = 0.8 px) Gaussian blur suppresses sub-pixel read noise without significantly broadening the star PSF (FWHM ≈ 3.5 px at σ = 1.5 px; smoothing with σ = 0.8 px adds ≈ 0.08 px in quadrature — negligible).
+
+Setting `noise_sigma: 0` or `noise_method: none` skips this step entirely.
+
+### 2.4 Intensity Normalisation
+
+**Algorithm: min–max rescaling (robust)**
+
+Config key: `preprocessing.normalization: min_max`
+
+The 99.9th-percentile pixel value is used as the upper bound (instead of the true maximum) to make the normalisation robust to hot pixels and cosmic-ray spikes. After normalisation the background level is close to zero and the brightest star peak is close to 1.0, giving the subsequent threshold a consistent meaning across all images.
+
+Alternative supported: `normalization: z_score` (zero mean, unit variance — useful for debugging, not recommended for thresholding).
 
 ---
 
 ## 3. Star Detection
 
-The star detection step identifies pixel regions in the preprocessed image that correspond to individual stars.
+### Phase 2 decisions (implemented)
 
-### 3.1 Detection Approach
+Star detection is implemented in `src/preprocessing/star_detection.py`. It takes the preprocessed float32 image and the `star_detection` config section, and returns a `list[StarCandidate]`.
 
-Stars appear as point-source objects — compact, approximately Gaussian intensity profiles above the background level. Detection involves:
-1. Applying an intensity threshold to identify candidate regions
-2. Localising the centroid of each candidate
-3. Filtering candidates by size, brightness, and morphology
+The pipeline runs in five steps:
 
-**Detection algorithm (e.g. blob detection, connected-component analysis, matched filter):** To be determined during Phase 2.
+```
+Preprocessed image
+    ↓
+Threshold → binary mask
+    ↓
+scipy.ndimage.label  →  connected-component map
+    ↓
+Filter blobs (area, peak brightness)
+    ↓
+Intensity-weighted centroid per blob
+    ↓
+Sort by brightness, cap at max_stars
+    ↓
+list[StarCandidate]
+```
 
-### 3.2 Centroiding
+### 3.1 Thresholding
 
-Subpixel centroid estimation improves the precision of star position measurements. A centroiding method will be selected to balance accuracy and computational cost.
+Two modes are supported:
 
-**Centroiding method:** To be determined during implementation.
+**Absolute threshold** (default, `threshold_method: absolute`)
 
-### 3.3 Output
+```
+mask = image >= min_brightness
+```
 
-Each detected star is represented as a structured record containing:
-- Centroid coordinates (x, y) in image space
-- Integrated brightness estimate
-- (Optional) additional morphological descriptors
+Config key: `star_detection.min_brightness: 0.05`
+
+After min-max normalisation, this selects pixels at ≥ 5% of the dynamic range. The synthetic background after preprocessing is < 0.01, so this threshold gives a comfortable margin.
+
+**Sigma-clip threshold** (`threshold_method: sigma_clip`)
+
+```
+threshold = median(image) + k × σ(image)
+```
+
+Config key: `star_detection.sigma_clip_k: 5.0`
+
+More adaptive: adjusts automatically if background levels vary between images. 5σ above the median is a standard astronomical detection threshold (probability of a noise peak exceeding 5σ is ≈ 3 × 10⁻⁷).
+
+### 3.2 Connected-Component Labelling
+
+`scipy.ndimage.label` with an 8-connectivity structuring element identifies contiguous groups of above-threshold pixels (blobs). Each blob is a candidate star.
+
+8-connectivity (diagonals count as connected) is used rather than 4-connectivity to correctly merge the slightly elongated Gaussian PSF footprint into a single blob.
+
+### 3.3 Blob Filtering
+
+Each labelled blob is filtered on two criteria before centroiding:
+
+| Filter | Config key | Value | Rationale |
+|---|---|---|---|
+| Area ≥ min_area_px | `min_area_px` | 1 | Reject isolated single-pixel hot pixels |
+| Area ≤ max_area_px | `max_area_px` | 200 | Reject large cosmic-ray tracks or saturation bleed |
+| Peak ≥ min_peak_brightness | `min_peak_brightness` | 0.04 | Reject faint diffuse regions |
+
+### 3.4 Centroiding
+
+**Algorithm: intensity-weighted centroid (first moment)**
+
+Config key: `star_detection.centroid_method: intensity_weighted`  
+Config key: `star_detection.centroid_half_window: 5`
+
+The centroid is computed over a (2W+1) × (2W+1) window centred on the peak pixel of the blob:
+
+```
+x̄ = Σ(I_ij × j) / Σ(I_ij)
+ȳ = Σ(I_ij × i) / Σ(I_ij)
+```
+
+The window is clamped to image bounds. If the window sum is zero (degenerate case), the peak pixel coordinate is returned.
+
+**Accuracy:** Berry & Burnell (2005) show that intensity-weighted centroiding achieves < 0.1 px RMS error for Gaussian PSFs with SNR > 10 and a window radius ≥ 3σ. Our synthetic images satisfy both conditions (SNR ≫ 10 for bright stars; window radius W = 5 px > 3 × 1.5 px = 4.5 px).
+
+On the Phase 1 synthetic dataset (noiseless conditions), measured centroid error is < 0.15 px (see notebook `02_star_detection.ipynb`, Section 4).
+
+Alternative: `centroid_method: peak` uses the integer peak pixel coordinate directly — fast but no sub-pixel precision.
+
+### 3.5 Output — `StarCandidate`
+
+Each detection is returned as a `StarCandidate` dataclass:
+
+| Field | Type | Description |
+|---|---|---|
+| `x` | float | Sub-pixel centroid column (horizontal) |
+| `y` | float | Sub-pixel centroid row (vertical) |
+| `brightness` | float | Integrated intensity within blob (sum of pixel values) |
+| `peak` | float | Maximum pixel value within blob |
+| `area` | int | Number of pixels in the connected-component blob |
+| `bbox` | tuple | `(row_min, col_min, row_max, col_max)` bounding box |
+| `features` | np.ndarray | Phase 3 — feature vector (empty until Phase 3) |
+| `metadata` | dict | Optional debug fields |
 
 ---
 
 ## 4. Feature Extraction
 
-The feature extraction step constructs a compact, discriminative representation of the observed star field from the list of detected stars. This representation is used as input to the neural network.
+### Status: Phase 3 — planned
 
-Potential feature types include:
-- Pairwise angular distances between stars
-- Brightness ratios between star pairs or triplets
-- Geometric patterns formed by star groupings (triangles, polygons)
-- Normalised positional descriptors
+`extract_features(stars, config)` in `star_detection.py` is a documented stub that raises `NotImplementedError`.
 
-**Feature representation design and dimensionality:** To be determined during Phase 3.
+**Planned approach:** The feature representation will be designed in Phase 3 based on what the neural network architecture requires. Current candidates:
 
-The representation must be:
-- Invariant (or robust) to image rotation and scale
-- Compact enough for efficient neural network inference
-- Discriminative enough to distinguish similar-looking patterns
+- **Pairwise angular distances** between star centroids, normalised by field of view — rotation and scale invariant.
+- **Brightness ratios** between star pairs or triplets — independent of absolute photometric calibration.
+- **Geometric descriptors** (triangle side ratios, polygon angles) formed by groups of detected stars.
+- **Normalised (x, y) positions** within the image frame.
+
+The representation must be invariant (or robust) to image rotation and scale, and compact enough for efficient neural network processing.
+
+**To be determined during Phase 3:** final representation dimensionality, normalisation strategy, handling of variable star count per frame.
 
 ---
 
-## 5. Neural Network-Based Recognition
+## 5. Neural Network Recognition
 
-The neural network is the central classification component. It takes the extracted feature vector as input and outputs either a class label corresponding to a known star pattern, or a similarity score for retrieval-based matching.
+**Status: Phase 3 — planned**
 
-### 5.1 Architecture
+Architecture (CNN, MLP, graph network, transformer, or hybrid) to be determined during Phase 3 based on the feature representation design and inference latency constraints.
 
-**Architecture (e.g. fully-connected MLP, CNN operating on feature maps, graph neural network, transformer):** To be determined during Phase 3.
-
-The choice of architecture will be guided by:
-- The dimensionality and structure of the input features
-- The required classification accuracy
-- Inference latency and memory constraints for the target platform
-
-### 5.2 Training Data
-
-The model requires labeled training examples pairing observed star-field features with known catalog identities. Training data may be sourced from:
-- Synthetic simulations of star fields generated from a catalog
-- Real imagery with known ground-truth orientations (if available)
-- Data augmentation to improve robustness
-
-**Training data strategy:** To be determined during Phase 3.
-
-### 5.3 Loss Function and Optimisation
-
-**Loss function:** To be determined during implementation.
-
-**Optimiser and learning-rate schedule:** To be determined during implementation.
-
-### 5.4 Evaluation
-
-The model will be evaluated on a held-out test set using metrics including:
-- Top-1 and top-k classification accuracy
-- Precision and recall
-- Confusion matrix analysis
-- Inference latency on target hardware
+**To be determined during Phase 3.**
 
 ---
 
 ## 6. Star Catalog Matching
 
-The output of the neural network identifies a candidate star pattern. The catalog matching step verifies and refines this identification by comparing the candidate against entries in a stored star catalog.
+**Status: Phase 4 — planned**
 
-### 6.1 Catalog
+Matching algorithm (hash-based lookup, k-nearest-neighbour search in embedding space, geometric verification) to be determined during Phase 4.
 
-The star catalog is a reference database of known stars with accurate celestial coordinates (right ascension, declination), apparent magnitudes, and identifiers.
-
-**Catalog source and format:** To be determined during Phase 1 dataset preparation.
-
-### 6.2 Matching Algorithm
-
-**Matching algorithm (e.g. hash-based lookup, k-nearest-neighbor search, geometric verification):** To be determined during Phase 4.
-
-### 6.3 Confidence Estimation
-
-Each match will be accompanied by a confidence score reflecting the reliability of the identification. A minimum confidence threshold (configurable via `config.yaml`) will gate the output to avoid low-quality navigation estimates.
-
-**Confidence model:** To be determined during implementation.
+**To be determined during Phase 4.**
 
 ---
 
 ## 7. Navigation Estimation
 
-Given a verified catalog match, the navigation estimation step computes the spacecraft's attitude and, where the methodology supports it, its position.
+**Status: Phase 5 — planned**
 
-### 7.1 Attitude Estimation
+Attitude estimation algorithm (QUEST, Davenport q-method, SVD/Wahba solution) to be determined during Phase 5.
 
-Spacecraft attitude describes its orientation in inertial space (typically expressed as a quaternion or as Euler angles). Attitude is computed from the correspondence between observed star directions (in the camera frame) and catalog star directions (in the inertial frame).
+Position estimation feasibility depends on the chosen methodology and will be assessed in Phase 5.
 
-**Estimation algorithm (e.g. QUEST, Davenport q-method, SVD-based solution):** To be determined during Phase 5.
-
-### 7.2 Position Estimation
-
-Position estimation from star imagery alone is generally not possible without additional information (e.g. knowledge of observable star magnitudes as a function of distance, or multi-camera parallax). Whether and how position estimation is supported will depend on the chosen methodology.
-
-**Position estimation approach:** To be determined during Phase 5.
+**To be determined during Phase 5.**
 
 ---
 
 ## 8. Evaluation Metrics
 
-The following metrics will be used to evaluate system performance across pipeline stages:
+| Stage | Metric | Phase 2 measured value |
+|---|---|---|
+| Star detection | Detection rate (TP / (TP + FN)) | See notebook 02, Section 6 |
+| Star detection | False positives per image | See notebook 02, Section 6 |
+| Centroiding | Mean centroid error (px) | < 0.15 px (noiseless synthetic) |
+| Feature extraction | Descriptor discriminability | TBD (Phase 3) |
+| Neural network | Top-1 / top-k accuracy | TBD (Phase 3) |
+| Catalog matching | Match rate, false-match rate | TBD (Phase 4) |
+| Attitude estimation | Mean angular error (deg) | TBD (Phase 5) |
+| End-to-end | Pipeline latency (ms) | TBD (Phase 6) |
 
-| Stage | Metrics |
-|---|---|
-| Star detection | Detection rate, false-positive rate, centroid accuracy |
-| Feature extraction | Descriptor discriminability, sensitivity analysis |
-| Neural network | Top-1 / top-k accuracy, precision, recall, F1 |
-| Catalog matching | Match rate, false-match rate, confidence calibration |
-| Attitude estimation | Angular error (degrees), statistical distribution |
-| Position estimation | Position error (km or arc-minutes, if applicable) |
-| End-to-end | Pipeline latency, memory usage, accuracy on test set |
-
-Specific numerical targets for each metric are to be established during implementation once baseline performance is characterised.
+Numerical targets for each metric will be established once baseline measurements are taken in the corresponding phase.
 
 ---
 
-## Open Questions
+## Open Decisions
 
-The following decisions remain open and will be resolved during the corresponding implementation phases:
-
-- Image format, resolution, and sensor model (Phase 1)
-- Preprocessing algorithms for noise and background (Phase 2)
-- Star detection algorithm and centroiding method (Phase 2)
-- Feature representation design (Phase 3)
-- Neural network architecture (Phase 3)
-- Training data generation strategy (Phase 3)
-- Star catalog source and format (Phase 1/4)
-- Catalog matching algorithm (Phase 4)
-- Attitude estimation algorithm (Phase 5)
-- Position estimation feasibility and approach (Phase 5)
+| Decision | Phase | Notes |
+|---|---|---|
+| Feature representation design | 3 | Candidates listed in §4 above |
+| Neural network architecture | 3 | Deferred pending feature design |
+| Star catalog extension (full Hipparcos) | 2/3 | Needed before Phase 3 training |
+| Training data generation strategy | 3 | Synthetic only vs. mixed |
+| Star catalog source for matching | 4 | Full Hipparcos recommended |
+| Catalog matching algorithm | 4 | |
+| Attitude estimation algorithm | 5 | |
+| Position estimation feasibility | 5 | |
+| Inference optimisation strategy | 6 | |

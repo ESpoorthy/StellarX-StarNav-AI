@@ -24,17 +24,39 @@ data:
   image_format: png            # lossless PNG; FITS support planned for Phase 2
   image_size: [512, 512]       # [height, width] in pixels
 
-# ── Preprocessing ─────────────────────────────────────────────────────────────
+# ── Preprocessing (Phase 2) ───────────────────────────────────────────────────
 preprocessing:
-  noise_reduction: null        # algorithm choice              — TBD
-  normalization: null          # method (e.g. min-max, z-score) — TBD
-  background_subtraction: null # boolean / method              — TBD
+  # Background subtraction
+  background_subtraction: true      # enable background removal
+  background_method: median_filter  # "median_filter" | "constant"
+  background_filter_size: 31        # odd integer; kernel size for median filter
 
-# ── Star detection ────────────────────────────────────────────────────────────
+  # Noise reduction
+  noise_reduction: true             # enable noise reduction
+  noise_method: gaussian            # "gaussian" | "none"
+  noise_sigma: 0.8                  # Gaussian blur sigma (pixels)
+
+  # Intensity normalisation (applied after background + noise steps)
+  normalization: min_max            # "min_max" | "z_score" | "none"
+
+# ── Star detection (Phase 2) ──────────────────────────────────────────────────
 star_detection:
-  min_brightness: null         # intensity threshold           — TBD
-  min_area_px: null            # minimum blob area in pixels   — TBD
-  max_stars: null              # cap on stars extracted/frame  — TBD
+  # Thresholding
+  threshold_method: absolute        # "absolute" | "sigma_clip"
+  min_brightness: 0.05              # absolute: min normalised pixel value (0–1)
+  sigma_clip_k: 5.0                 # sigma_clip: threshold = median + k * sigma
+
+  # Morphological filtering
+  min_area_px: 1                    # minimum blob area (pixels)
+  max_area_px: 200                  # maximum blob area (pixels) — rejects large artifacts
+  min_peak_brightness: 0.04         # minimum peak pixel value in blob
+
+  # Output
+  max_stars: 50                     # maximum candidates returned per image
+
+  # Centroiding
+  centroid_method: intensity_weighted   # "intensity_weighted" | "peak"
+  centroid_half_window: 5               # half-size of centroiding window (pixels)
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 model:
