@@ -1,0 +1,160 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Add `recognition` section to config.yaml with keys: angle_tolerance_deg: 0.5, min_inliers: 3, confidence_success: 0.6, confidence_partial: 0.3, max_residual_deg: 1.0, ransac_iterations: 50": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078924508
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078936864
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078979984
+      }
+    ],
+    "1.2 Add `navigation` section to config.yaml with keys: min_correspondences: 2, max_residual_threshold_deg: 2.0, attitude_confidence_threshold: 0.3": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078924756
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078937541
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078980683
+      }
+    ],
+    "2.1 Implement plot_star_field() in src/utils/visualization.py": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078924840
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078987267
+      }
+    ],
+    "2.2 Implement plot_detections() in src/utils/visualization.py": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078924887
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078987777
+      }
+    ],
+    "2.3 Implement plot_confidence_distribution() in src/utils/visualization.py": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078924937
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078988401
+      }
+    ],
+    "2.4 Implement plot_attitude_residuals() in src/utils/visualization.py": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078924986
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078988969
+      }
+    ],
+    "2.5 Add plot_recognition_result() function showing matched/unmatched/outlier stars": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925050
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078990009
+      }
+    ],
+    "3.1 Implement match_pattern() in src/catalog/pattern_matcher.py using the recognition module": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925094
+      },
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078990686
+      }
+    ],
+    "4.1 Create tests/test_phase4_recognition.py with all 10 required Phase 4 tests": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925137
+      }
+    ],
+    "5.1 Create src/evaluation/phase4_eval.py with run_phase4_evaluation() function": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925178
+      }
+    ],
+    "6.1 Create run_pipeline.py at repo root": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925265
+      }
+    ],
+    "7.1 Create benchmark.py at repo root": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925309
+      }
+    ],
+    "8.1 Run existing test suite and fix any regressions": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925358
+      }
+    ],
+    "9.1 Run tests/test_phase4_recognition.py and fix all failures": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925412
+      }
+    ],
+    "10.1 Run Phase 4 evaluation and capture real metrics": [
+      {
+        "executionId": "b093695e-cc50-43d0-b04c-0abda0986842",
+        "chatSessionId": "sess_4f8b2871-8b41-4b10-a7ef-529427b03eba",
+        "timestamp": 1788078925457
+      }
+    ]
+  }
+}

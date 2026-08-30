@@ -1,0 +1,36 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.14.6, pytest-8.4.2, pluggy-1.6.0 -- C:\Users\Sahithi\AppData\Local\Python\pythoncore-3.14-64\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\Sahithi\OneDrive\Desktop\StellarX-StarNav-AI
+plugins: anyio-4.14.2
+collecting ... collected 27 items
+
+tests/test_phase4_recognition.py::TestKnownPattern::test_produces_valid_status SKIPPED [  3%]
+tests/test_phase4_recognition.py::TestKnownPattern::test_identified_stars_have_hip_ids SKIPPED [  7%]
+tests/test_phase4_recognition.py::TestKnownPattern::test_n_observed_matches_n_stars SKIPPED [ 11%]
+tests/test_phase4_recognition.py::TestRotatedPattern::test_pairwise_angles_rotation_invariant SKIPPED [ 14%]
+tests/test_phase4_recognition.py::TestRotatedPattern::test_rotated_returns_valid_output SKIPPED [ 18%]
+tests/test_phase4_recognition.py::TestNoisyCentroids::test_small_noise_no_crash SKIPPED [ 22%]
+tests/test_phase4_recognition.py::TestNoisyCentroids::test_moderate_noise_valid_status SKIPPED [ 25%]
+tests/test_phase4_recognition.py::TestMissingStar::test_5_of_6_no_exception SKIPPED [ 29%]
+tests/test_phase4_recognition.py::TestMissingStar::test_3_stars_valid_output SKIPPED [ 33%]
+tests/test_phase4_recognition.py::TestSpuriousStar::test_injected_false_star_inliers_bounded SKIPPED [ 37%]
+tests/test_phase4_recognition.py::TestAmbiguousPattern::test_random_vectors_not_success PASSED [ 40%]
+tests/test_phase4_recognition.py::TestNoMatch::test_zero_stars_failure PASSED [ 44%]
+tests/test_phase4_recognition.py::TestNoMatch::test_zero_stars_no_crash PASSED [ 48%]
+tests/test_phase4_recognition.py::TestInsufficientStars::test_one_star_failure PASSED [ 51%]
+tests/test_phase4_recognition.py::TestInsufficientStars::test_one_star_no_crash PASSED [ 55%]
+tests/test_phase4_recognition.py::TestCandidateRanking::test_confidence_in_unit_range SKIPPED [ 59%]
+tests/test_phase4_recognition.py::TestCandidateRanking::test_per_star_residuals_non_negative SKIPPED [ 62%]
+tests/test_phase4_recognition.py::TestCandidateRanking::test_matched_pattern_inlier_count_matches SKIPPED [ 66%]
+tests/test_phase4_recognition.py::TestCandidateRanking::test_is_successful_only_when_success PASSED [ 70%]
+tests/test_phase4_recognition.py::TestNoiseConfidence::test_heavy_noise_confidence_bounded SKIPPED [ 74%]
+tests/test_phase4_recognition.py::TestNoiseConfidence::test_clean_inliers_ge_noisy SKIPPED [ 77%]
+tests/test_phase4_recognition.py::TestAttitudeEstimator::test_identity_corr_zero_error PASSED [ 81%]
+tests/test_phase4_recognition.py::TestAttitudeEstimator::test_known_rotation_recovered PASSED [ 85%]
+tests/test_phase4_recognition.py::TestAttitudeEstimator::test_too_few_corr_invalid PASSED [ 88%]
+tests/test_phase4_recognition.py::TestAttitudeEstimator::test_shape_mismatch_raises PASSED [ 92%]
+tests/test_phase4_recognition.py::TestNavigationSmoke::test_zero_star_image_no_crash PASSED [ 96%]
+tests/test_phase4_recognition.py::TestNavigationSmoke::test_pipeline_returns_navigation_result PASSED [100%]
+
+======================= 12 passed, 15 skipped in 1.04s ========================
