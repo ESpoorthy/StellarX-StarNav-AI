@@ -108,10 +108,17 @@ evaluation:
   confidence_threshold: 0.3      # minimum probability for an accepted prediction
   top_k: 3                       # top-k accuracy metric
 
-# ── Navigation ────────────────────────────────────────────────────────────────
+# ── Navigation (Phase 5) ─────────────────────────────────────────────────────
 navigation:
-  attitude_method: null        # estimation algorithm          — TBD
-  position_method: null        # estimation algorithm (if applicable) — TBD
+  attitude_method: wahba_svd         # Wahba/SVD weighted least-squares
+  position_method: unavailable       # single-image position not observable
+
+  # Wahba/SVD parameters
+  min_correspondences: 2             # minimum inliers for valid attitude
+  max_residual_threshold_deg: 2.0    # maximum mean residual for is_valid=True
+  outlier_rejection_threshold_deg: 2.0  # per-star residual threshold for rejection
+  outlier_rejection_max_iter: 3      # iterations of outlier rejection
+  attitude_confidence_threshold: 0.3 # minimum confidence for valid result
 
 # ── Dataset generation (Phase 1) ──────────────────────────────────────────────
 dataset:
