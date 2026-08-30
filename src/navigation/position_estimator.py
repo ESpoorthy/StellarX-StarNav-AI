@@ -1,23 +1,30 @@
 """
-position_estimator.py
-=====================
-Responsible for estimating spacecraft position from catalog matches,
-where the chosen methodology supports it.
+position_estimator.py — Phase 5
+=================================
+Spacecraft position estimation.
 
-Responsibility (planned)
-------------------------
-- Accept a verified catalog match and attitude estimate.
-- Apply a position estimation algorithm appropriate to the available data.
-- Return a PositionEstimate with uncertainty metrics.
+Scientific design decision
+--------------------------
+A single star-field image determines ATTITUDE (3 DoF orientation), not
+absolute POSITION (3 DoF location in space).
 
-Implementation note
--------------------
-Position estimation from star imagery alone is generally underdetermined
-without additional information (e.g. known orbital mechanics, multi-camera
-parallax, or magnitude-distance relationships).  Whether and how position
-estimation is supported will be determined during Phase 5.
+Stars are effectively at infinite distance. Their observed angular positions
+give camera pointing direction (attitude) but carry no distance information.
+To determine position you need one of:
+  1. Multi-image baseline triangulation (known separation between images)
+  2. Orbital mechanics propagation from a known initial state
+  3. Additional sensors (GPS, IMU, LIDAR, planetary limb sensing)
+  4. Near-body navigation (planetary/lunar limb crossing)
 
-All parameters must be sourced from config.yaml.
+This module returns PositionEstimate(is_valid=False) with an honest
+explanation. The architecture is designed so that a future phase can
+integrate orbital mechanics or multi-image data without changing the
+function signature.
+
+References
+----------
+Markley, F.L. & Crassidis, J.L. (2014). Fundamentals of Spacecraft
+Attitude Determination and Control. Springer.
 """
 
 from __future__ import annotations
@@ -28,10 +35,14 @@ import numpy as np
 
 from src.navigation.attitude_estimator import AttitudeEstimate
 
-
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
+_POSITION_UNAVAILABLE_NOTE = (
+    "POSITION UNAVAILABLE: Single-image star tracking determines spacecraft "
+    "ATTITUDE (3 DoF orientation) only. Absolute position requires "
+    "multi-image triangulation, orbital mechanics propagation, or additional "
+    "sensors (IMU, GPS, planetary limb). "
+    "This is scientifically correct — star directions are angular measurements "
+    "with no distance information."
+)
 
 
 @dataclass
@@ -41,32 +52,37 @@ class PositionEstimate:
     Attributes
     ----------
     position_vector : np.ndarray
-        Estimated position vector.  Units and reference frame are TBD
-        (Phase 5) and depend on the chosen methodology.
+        Shape (3,). NaN for single-image case (position not observable).
+    velocity_vector : np.ndarray
+        Shape (3,). NaN for single-image case.
     uncertainty : np.ndarray
-        Uncertainty / covariance associated with the estimate.  Shape TBD.
+        Shape (3, 3). NaN for single-image case.
     is_valid : bool
-        True if the estimate meets the configured quality threshold.
+        False for single-image case. Position not observable from one image.
     method : str
-        Name of the algorithm used to produce this estimate.
+        Algorithm name.
     notes : str
-        Human-readable notes, e.g. explaining why estimation was not possible.
+        Human-readable explanation of availability/unavailability.
+    position_status : str
+        "UNAVAILABLE", "ESTIMATED", or "FAILED".
+    velocity_status : str
+        "UNAVAILABLE", "ESTIMATED", or "FAILED".
     """
 
     position_vector: np.ndarray = field(
-        default_factory=lambda: np.array([float("nan")] * 3)
+        default_factory=lambda: np.full(3, float("nan"))
+    )
+    velocity_vector: np.ndarray = field(
+        default_factory=lambda: np.full(3, float("nan"))
     )
     uncertainty: np.ndarray = field(
         default_factory=lambda: np.full((3, 3), float("nan"))
     )
     is_valid: bool = False
-    method: str = "undefined"
-    notes: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+    method: str = "single_image_attitude_only"
+    notes: str = _POSITION_UNAVAILABLE_NOTE
+    position_status: str = "UNAVAILABLE"
+    velocity_status: str = "UNAVAILABLE"
 
 
 def estimate_position(
@@ -74,31 +90,34 @@ def estimate_position(
     catalog_match_metadata: dict,
     config: dict,
 ) -> PositionEstimate:
-    """Estimate spacecraft position from attitude and catalog match data.
+    """Return PositionEstimate explaining why position cannot be determined.
+
+    Single-image star tracking provides attitude only.
+    This function never raises — it always returns a valid object with
+    is_valid=False and an honest explanation.
 
     Parameters
     ----------
-    attitude_estimate:
-        Validated AttitudeEstimate from ``src.navigation.attitude_estimator``.
-    catalog_match_metadata:
-        Additional metadata from the catalog match that may support
-        position estimation (content TBD, Phase 5).
-    config:
-        Navigation configuration dict (``navigation`` section of config.yaml).
+    attitude_estimate : AttitudeEstimate
+        Attitude result from estimate_attitude().
+    catalog_match_metadata : dict
+        Catalog match metadata (unused for single-image case).
+    config : dict
+        Navigation config dict.
 
     Returns
     -------
-    PositionEstimate
-        Estimated position.  ``is_valid`` will be False if estimation is
-        not supported by the current methodology.
-
-    Raises
-    ------
-    NotImplementedError
-        Until this function is implemented in Phase 5.
+    PositionEstimate  with is_valid=False.
     """
-    # TODO (Phase 5): determine feasibility of position estimation given
-    #   the chosen methodology and implement accordingly.
-    #   If position estimation is not supportable, return a PositionEstimate
-    #   with is_valid=False and an explanatory note rather than raising.
-    raise NotImplementedError("estimate_position is not yet implemented.")
+    return PositionEstimate(
+        position_vector=np.full(3, float("nan")),
+        velocity_vector=np.full(3, float("nan")),
+        uncertainty=np.full((3, 3), float("nan")),
+        is_valid=False,
+        method=config.get("navigation", {}).get(
+            "position_method", "single_image_attitude_only"
+        ),
+        notes=_POSITION_UNAVAILABLE_NOTE,
+        position_status="UNAVAILABLE",
+        velocity_status="UNAVAILABLE",
+    )
