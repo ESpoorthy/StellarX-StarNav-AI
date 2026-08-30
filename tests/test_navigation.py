@@ -1,175 +1,117 @@
 """
 test_navigation.py
 ==================
-Unit tests for src.navigation.attitude_estimator and
-src.navigation.position_estimator.
+Tests for Phase 5 navigation modules.
 
-Tests are structured to cover the public API of each module.
-Implementation of test bodies is deferred until Phase 5, when the
-corresponding source functions are implemented.
-
-Run with:
-    pytest tests/test_navigation.py
+Updated from Phase 5 stubs — estimate_attitude and estimate_position
+are now fully implemented.
 """
-
 from __future__ import annotations
-
 import pytest
 import numpy as np
+from src.navigation.attitude_estimator import AttitudeEstimate, estimate_attitude
+from src.navigation.position_estimator import PositionEstimate, estimate_position
 
-from src.navigation.attitude_estimator import AttitudeEstimate
-from src.navigation.position_estimator import PositionEstimate
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def identity_correspondences() -> tuple[np.ndarray, np.ndarray]:
-    """Return perfectly aligned observed and catalog direction pairs.
-
-    Both arrays are identical unit vectors — the expected attitude solution
-    is the identity rotation.
-    """
-    directions = np.array(
-        [
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0],
-        ],
-        dtype=np.float64,
-    )
-    return directions, directions.copy()
-
-
-@pytest.fixture()
-def mismatched_correspondences() -> tuple[np.ndarray, np.ndarray]:
-    """Return direction arrays with inconsistent shapes to test validation."""
-    observed = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64)
-    catalog = np.array([[1.0, 0.0, 0.0]], dtype=np.float64)
-    return observed, catalog
-
-
-@pytest.fixture()
-def navigation_config() -> dict:
-    """Return a minimal navigation configuration dict."""
-    return {
-        "attitude_method": None,
-        "position_method": None,
+NAV_CFG = {
+    "navigation": {
+        "min_correspondences": 2,
+        "max_residual_threshold_deg": 2.0,
+        "outlier_rejection_threshold_deg": 2.0,
+        "outlier_rejection_max_iter": 3,
     }
+}
 
 
 @pytest.fixture()
-def valid_attitude_estimate() -> AttitudeEstimate:
-    """Return a valid AttitudeEstimate (identity rotation)."""
-    return AttitudeEstimate(
-        quaternion=np.array([1.0, 0.0, 0.0, 0.0]),
-        rotation_matrix=np.eye(3),
-        residual_deg=0.0,
-        num_correspondences=3,
-        is_valid=True,
-    )
+def identity_correspondences():
+    d = np.eye(3, dtype=np.float64)
+    return d, d.copy()
 
+@pytest.fixture()
+def mismatched_correspondences():
+    obs = np.array([[1.,0.,0.],[0.,1.,0.]])
+    cat = np.array([[1.,0.,0.]])
+    return obs, cat
 
-# ---------------------------------------------------------------------------
-# AttitudeEstimate dataclass tests
-# ---------------------------------------------------------------------------
+@pytest.fixture()
+def valid_attitude_estimate():
+    return AttitudeEstimate(quaternion=np.array([1.,0.,0.,0.]),
+                            rotation_matrix=np.eye(3), residual_deg=0.0,
+                            num_correspondences=3, is_valid=True)
 
 
 class TestAttitudeEstimateDefaults:
-    """Tests for AttitudeEstimate default values."""
-
     def test_default_quaternion_is_unit(self):
-        """Default quaternion should be [1, 0, 0, 0] (identity)."""
         est = AttitudeEstimate()
         assert np.allclose(est.quaternion, [1.0, 0.0, 0.0, 0.0])
 
     def test_default_rotation_matrix_is_identity(self):
-        """Default rotation matrix should be the 3×3 identity."""
-        est = AttitudeEstimate()
-        assert np.allclose(est.rotation_matrix, np.eye(3))
+        assert np.allclose(AttitudeEstimate().rotation_matrix, np.eye(3))
 
     def test_default_is_not_valid(self):
-        """Default AttitudeEstimate should have is_valid=False."""
+        assert AttitudeEstimate().is_valid is False
+
+    def test_has_euler_angles_field(self):
         est = AttitudeEstimate()
-        assert est.is_valid is False
+        assert hasattr(est, "euler_angles_deg")
+        assert len(est.euler_angles_deg) == 3
 
-
-# ---------------------------------------------------------------------------
-# estimate_attitude tests
-# ---------------------------------------------------------------------------
+    def test_has_attitude_confidence_field(self):
+        est = AttitudeEstimate()
+        assert hasattr(est, "attitude_confidence")
+        assert est.attitude_confidence == 0.0
 
 
 class TestEstimateAttitude:
-    """Tests for attitude_estimator.estimate_attitude."""
+    def test_identity_no_longer_raises(self, identity_correspondences):
+        """Phase 5: estimate_attitude is implemented, not NotImplementedError."""
+        obs, cat = identity_correspondences
+        result = estimate_attitude(obs, cat, NAV_CFG)
+        assert isinstance(result, AttitudeEstimate)
 
-    def test_raises_not_implemented(
-        self, identity_correspondences, navigation_config
-    ):
-        """estimate_attitude should raise NotImplementedError until Phase 5."""
-        from src.navigation.attitude_estimator import estimate_attitude
+    def test_identity_produces_valid_result(self, identity_correspondences):
+        obs, cat = identity_correspondences
+        result = estimate_attitude(obs, cat, NAV_CFG)
+        assert result.is_valid
+        assert result.residual_deg < 0.01
 
-        observed, catalog = identity_correspondences
-        with pytest.raises(NotImplementedError):
-            estimate_attitude(observed, catalog, navigation_config)
-
-    def test_raises_value_error_on_shape_mismatch(
-        self, mismatched_correspondences, navigation_config
-    ):
-        """estimate_attitude should raise ValueError on mismatched shapes."""
-        from src.navigation.attitude_estimator import estimate_attitude
-
-        observed, catalog = mismatched_correspondences
+    def test_raises_value_error_on_shape_mismatch(self, mismatched_correspondences):
+        obs, cat = mismatched_correspondences
         with pytest.raises(ValueError):
-            estimate_attitude(observed, catalog, navigation_config)
+            estimate_attitude(obs, cat, NAV_CFG)
 
-    # TODO (Phase 5): add tests for:
-    #   - identity correspondences → quaternion ≈ [1, 0, 0, 0]
-    #   - known rotation → recovered quaternion within tolerance
-    #   - residual_deg is non-negative
-    #   - is_valid=True when residual is below threshold
-    #   - is_valid=False when fewer than minimum correspondences provided
-
-
-# ---------------------------------------------------------------------------
-# PositionEstimate dataclass tests
-# ---------------------------------------------------------------------------
+    def test_too_few_correspondences_invalid(self):
+        obs = np.array([[1.0, 0.0, 0.0]])
+        cat = np.array([[1.0, 0.0, 0.0]])
+        result = estimate_attitude(obs, cat, NAV_CFG)
+        assert result.is_valid is False
 
 
 class TestPositionEstimateDefaults:
-    """Tests for PositionEstimate default values."""
-
     def test_default_is_not_valid(self):
-        """Default PositionEstimate should have is_valid=False."""
-        est = PositionEstimate()
-        assert est.is_valid is False
+        assert PositionEstimate().is_valid is False
 
     def test_default_position_is_nan(self):
-        """Default position_vector should contain NaN values."""
-        est = PositionEstimate()
-        assert np.all(np.isnan(est.position_vector))
+        assert np.all(np.isnan(PositionEstimate().position_vector))
 
-
-# ---------------------------------------------------------------------------
-# estimate_position tests
-# ---------------------------------------------------------------------------
+    def test_has_position_status(self):
+        assert PositionEstimate().position_status == "UNAVAILABLE"
 
 
 class TestEstimatePosition:
-    """Tests for position_estimator.estimate_position."""
+    def test_no_longer_raises(self, valid_attitude_estimate):
+        """Phase 5: estimate_position returns PositionEstimate, doesn't raise."""
+        result = estimate_position(valid_attitude_estimate, {}, NAV_CFG)
+        assert isinstance(result, PositionEstimate)
 
-    def test_raises_not_implemented(
-        self, valid_attitude_estimate, navigation_config
-    ):
-        """estimate_position should raise NotImplementedError until Phase 5."""
-        from src.navigation.position_estimator import estimate_position
+    def test_always_invalid_single_image(self, valid_attitude_estimate):
+        result = estimate_position(valid_attitude_estimate, {}, NAV_CFG)
+        assert result.is_valid is False
 
-        with pytest.raises(NotImplementedError):
-            estimate_position(valid_attitude_estimate, {}, navigation_config)
+    def test_position_unavailable_status(self, valid_attitude_estimate):
+        result = estimate_position(valid_attitude_estimate, {}, NAV_CFG)
+        assert result.position_status == "UNAVAILABLE"
 
-    # TODO (Phase 5): add tests for:
-    #   - returns PositionEstimate (never raises) when methodology is unsupported
-    #   - is_valid=False with explanatory note when estimation is not possible
-    #   - valid estimate when sufficient data is available (if implemented)
+    def test_notes_explain_why(self, valid_attitude_estimate):
+        result = estimate_position(valid_attitude_estimate, {}, NAV_CFG)
+        assert len(result.notes) > 20  # non-trivial explanation
