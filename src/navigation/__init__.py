@@ -1,10 +1,12 @@
 """
-src.navigation
---------------
-Provides spacecraft attitude and position estimation from catalog matches.
+src.navigation — Phase 5
+------------------------
+Spacecraft attitude determination from verified star correspondences.
 
 Modules
 -------
-attitude_estimator : compute spacecraft orientation from star correspondences
-position_estimator : compute spacecraft position where methodology supports it
+camera_model      : CameraModel — pinhole projection, pixel↔unit-vector
+attitude_estimator: estimate_attitude() — Wahba/SVD, quaternion, Euler angles
+position_estimator: estimate_position() — always UNAVAILABLE (single image)
+navigator         : run_navigation(), run_full_pipeline(), NavigationResult
 """

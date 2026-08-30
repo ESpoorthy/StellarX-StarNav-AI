@@ -1,29 +1,45 @@
 """
 navigator.py — Phase 5
 ======================
-End-to-end navigation pipeline combining Phase 4 (recognition) and Phase 5 (attitude).
+End-to-end navigation pipeline: image → attitude determination.
 
-Orchestrates:
-  1. Star detection
-  2. Feature extraction for neural prior
-  3. Neural inference (if model provided)
-  4. Pattern building
-  5. Pattern recognition / catalog matching
-  6. Attitude estimation from inlier correspondences
-  7. Position note (single-image position not available)
+Pipeline stages:
+  1. Star detection          (Phase 2)
+  2. Feature extraction      (Phase 3, optional neural prior)
+  3. Pattern building        (Phase 4)
+  4. Pattern recognition     (Phase 4: vote + RANSAC + Wahba)
+  5. Attitude estimation     (Phase 5: weighted Wahba/SVD + outlier rejection)
+  6. Position note           (Phase 5: scientifically honest unavailability)
 
-All failure cases are handled gracefully (zero stars, no match, etc.).
+Navigation status semantics:
+  SUCCESS          — attitude determined, meets all quality thresholds
+  PARTIAL          — attitude estimated but below SUCCESS threshold
+  LOW_CONFIDENCE   — weak match, attitude unreliable
+  INSUFFICIENT_STARS — too few stars detected or matched
+  ATTITUDE_FAILURE — sufficient stars but attitude estimation failed
+  FAILURE          — recognition failed
+  ERROR            — unexpected exception
+
+Position status:
+  ATTITUDE_DETERMINED / POSITION_UNAVAILABLE
+  (single-image star tracking cannot determine absolute position)
 """
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 
-from src.navigation.attitude_estimator import AttitudeEstimate, estimate_attitude
+from src.navigation.attitude_estimator import (
+    AttitudeEstimate,
+    angular_error_deg,
+    estimate_attitude,
+)
+from src.navigation.position_estimator import PositionEstimate, estimate_position
 from src.preprocessing.star_detection import detect_stars, extract_features
 from src.recognition.catalog_index import CatalogIndex
 from src.recognition.pattern_builder import build_pattern
@@ -31,79 +47,82 @@ from src.recognition.pattern_matcher import RecognitionOutput, RecognitionStatus
 
 
 # ---------------------------------------------------------------------------
-# Data structures
+# NavigationResult
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class NavigationResult:
-    """Complete output from one navigation pipeline run.
+    """Complete Phase 5 navigation output for one image.
 
     Attributes
     ----------
     timestamp : float
-        Unix timestamp of when the result was produced, seconds.
+        Unix timestamp (seconds).
     status : str
-        "SUCCESS", "PARTIAL", "LOW_CONFIDENCE", "FAILURE", or "ERROR".
-    quaternion : np.ndarray
-        [qw, qx, qy, qz], rotation from camera frame to inertial frame.
-    rotation_matrix : np.ndarray
-        3x3 rotation matrix (camera to inertial).
-    euler_angles_deg : np.ndarray
-        [yaw, pitch, roll] in ZYX convention, degrees.
-    attitude_confidence : float
-        Confidence in attitude estimate, in [0, 1].
-    attitude_residual_deg : float
-        Mean angular residual of the attitude fit, degrees.
-    position_note : str
-        Explanation of why position is not estimated from a single image.
+        Overall navigation status string.
+    attitude_status : str
+        "DETERMINED", "PARTIAL", "LOW_CONFIDENCE", "FAILURE".
+    position_status : str
+        Always "UNAVAILABLE" for single-image case.
+    velocity_status : str
+        Always "UNAVAILABLE" for single-image case.
+
+    quaternion : np.ndarray  [qw, qx, qy, qz], camera→inertial.
+    rotation_matrix : np.ndarray  3×3, camera→inertial.
+    euler_angles_deg : np.ndarray  [yaw, pitch, roll] degrees, display only.
+    attitude_confidence : float  In [0, 1].
+    attitude_residual_deg : float  Mean angular residual, degrees.
+    max_residual_deg : float  Max per-star residual, degrees.
+
+    position_note : str  Explanation of why position is unavailable.
+
     n_observed_stars : int
-        Number of stars detected in the image.
     n_matched_stars : int
-        Number of stars with tentative catalog matches.
     n_inlier_stars : int
-        Number of RANSAC inlier correspondences.
-    identified_stars : list
-        List of IdentifiedStar from recognition.
+    n_outlier_stars : int
+    identified_stars : list[IdentifiedStar]
+
     preprocessing_time_ms : float
-        Time for star detection in milliseconds.
     detection_time_ms : float
-        Time for star detection step in milliseconds.
     feature_extraction_time_ms : float
-        Time for feature extraction in milliseconds.
     recognition_time_ms : float
-        Time for catalog matching in milliseconds.
     attitude_time_ms : float
-        Time for attitude estimation in milliseconds.
     total_time_ms : float
-        Total pipeline wall-clock time in milliseconds.
+
     error_message : str
-        Error description if status is "ERROR".
     """
 
     timestamp: float = 0.0
     status: str = "FAILURE"
+    attitude_status: str = "FAILURE"
+    position_status: str = "UNAVAILABLE"
+    velocity_status: str = "UNAVAILABLE"
 
-    # Attitude output
-    quaternion: np.ndarray = field(default_factory=lambda: np.array([1.0, 0.0, 0.0, 0.0]))
+    # Attitude
+    quaternion: np.ndarray = field(
+        default_factory=lambda: np.array([1.0, 0.0, 0.0, 0.0])
+    )
     rotation_matrix: np.ndarray = field(default_factory=lambda: np.eye(3))
     euler_angles_deg: np.ndarray = field(default_factory=lambda: np.zeros(3))
     attitude_confidence: float = 0.0
     attitude_residual_deg: float = float("nan")
+    max_residual_deg: float = float("nan")
 
-    # Position (not estimated from single image)
+    # Position (always unavailable for single image)
     position_note: str = (
-        "Position estimation requires multi-image data, orbital mechanics, "
-        "or additional sensors. Single-image star tracking provides attitude only."
+        "POSITION UNAVAILABLE: Single-image star tracking provides attitude only. "
+        "Position requires multi-image data, orbital mechanics, or additional sensors."
     )
 
-    # Matched stars
+    # Stars
     n_observed_stars: int = 0
     n_matched_stars: int = 0
     n_inlier_stars: int = 0
+    n_outlier_stars: int = 0
     identified_stars: list = field(default_factory=list)
 
-    # Performance timing (milliseconds)
+    # Timing (ms)
     preprocessing_time_ms: float = 0.0
     detection_time_ms: float = 0.0
     feature_extraction_time_ms: float = 0.0
@@ -111,7 +130,6 @@ class NavigationResult:
     attitude_time_ms: float = 0.0
     total_time_ms: float = 0.0
 
-    # Error info
     error_message: str = ""
 
 
@@ -126,39 +144,36 @@ def run_navigation(
     catalog_index: CatalogIndex,
     neural_model=None,
 ) -> NavigationResult:
-    """Run the complete navigation pipeline on a preprocessed image.
+    """Run complete Phase 1-5 navigation on a preprocessed image.
 
     Parameters
     ----------
     image : np.ndarray
-        2D float32 image array, values in [0, 1]. Should already be
-        preprocessed (background-subtracted, noise-reduced, normalized).
+        2D float32, values in [0, 1]. Already preprocessed.
     config : dict
-        Project configuration dict.
+        Full project configuration dict.
     catalog_index : CatalogIndex
-        Pre-built indexed star catalog.
+        Pre-built star catalog index.
     neural_model : optional
-        Trained StarPatternClassifier or similar, for neural prior.
-        If None, only geometric matching is used.
+        Trained classifier for neural prior. None = geometric only.
 
     Returns
     -------
     NavigationResult
-        Complete result including attitude and performance metrics.
     """
-    t_total_start = time.perf_counter()
+    t_total = time.perf_counter()
     timestamp = time.time()
 
     try:
-        # Step 1: Star detection
+        nav_cfg = config.get("navigation", {})
+        min_inliers_attitude = int(nav_cfg.get("min_correspondences", 2))
+
+        # ── Step 1: Star detection ────────────────────────────────────────
         t0 = time.perf_counter()
-        star_detection_cfg = config.get("star_detection", {})
-        stars = detect_stars(image, star_detection_cfg)
-        detection_time_ms = (time.perf_counter() - t0) * 1000.0
+        stars = detect_stars(image, config.get("star_detection", {}))
+        detection_ms = (time.perf_counter() - t0) * 1000.0
 
-        n_observed = len(stars)
-
-        # Step 2: Feature extraction for neural prior
+        # ── Step 2: Neural prior (optional) ──────────────────────────────
         t0 = time.perf_counter()
         neural_result = None
         if neural_model is not None and len(stars) >= 2:
@@ -168,56 +183,61 @@ def run_navigation(
                 neural_result = run_inference(neural_model, features, config)
             except Exception:
                 neural_result = None
-        feature_time_ms = (time.perf_counter() - t0) * 1000.0
+        feature_ms = (time.perf_counter() - t0) * 1000.0
 
-        # Step 3: Pattern building
+        # ── Step 3: Pattern building ──────────────────────────────────────
         t0 = time.perf_counter()
         pattern = build_pattern(stars, config)
-        pattern_time_ms = (time.perf_counter() - t0) * 1000.0
+        pattern_ms = (time.perf_counter() - t0) * 1000.0
 
-        # Step 4: Pattern recognition / catalog matching
+        # ── Step 4: Pattern recognition (Phase 4) ────────────────────────
         t0 = time.perf_counter()
-        rec_output: RecognitionOutput = run_recognition(
+        rec: RecognitionOutput = run_recognition(
             pattern, catalog_index, config, neural_result=neural_result
         )
-        recognition_time_ms = (time.perf_counter() - t0) * 1000.0
+        recognition_ms = (time.perf_counter() - t0) * 1000.0 + pattern_ms
 
-        # Step 5: Attitude estimation from inlier correspondences
+        # ── Step 5: Attitude estimation (Phase 5) ────────────────────────
         t0 = time.perf_counter()
-        attitude_estimate = _estimate_attitude_from_recognition(rec_output, config)
-        attitude_time_ms = (time.perf_counter() - t0) * 1000.0
+        att = _attitude_from_recognition(rec, config)
+        attitude_ms = (time.perf_counter() - t0) * 1000.0
 
-        # Determine navigation status
-        nav_status = rec_output.status.value  # "SUCCESS", "PARTIAL", etc.
+        # ── Determine navigation status ───────────────────────────────────
+        nav_status, att_status = _determine_status(rec, att, config)
 
-        total_time_ms = (time.perf_counter() - t_total_start) * 1000.0
+        total_ms = (time.perf_counter() - t_total) * 1000.0
 
         return NavigationResult(
             timestamp=timestamp,
             status=nav_status,
-            quaternion=attitude_estimate.quaternion.copy(),
-            rotation_matrix=attitude_estimate.rotation_matrix.copy(),
-            euler_angles_deg=attitude_estimate.euler_angles_deg.copy(),
-            attitude_confidence=attitude_estimate.attitude_confidence,
-            attitude_residual_deg=attitude_estimate.residual_deg,
-            n_observed_stars=n_observed,
-            n_matched_stars=rec_output.n_matched,
-            n_inlier_stars=rec_output.n_inliers,
-            identified_stars=rec_output.identified_stars,
-            preprocessing_time_ms=0.0,  # image already preprocessed
-            detection_time_ms=detection_time_ms,
-            feature_extraction_time_ms=feature_time_ms,
-            recognition_time_ms=recognition_time_ms + pattern_time_ms,
-            attitude_time_ms=attitude_time_ms,
-            total_time_ms=total_time_ms,
+            attitude_status=att_status,
+            position_status="UNAVAILABLE",
+            velocity_status="UNAVAILABLE",
+            quaternion=att.quaternion.copy(),
+            rotation_matrix=att.rotation_matrix.copy(),
+            euler_angles_deg=att.euler_angles_deg.copy(),
+            attitude_confidence=att.attitude_confidence,
+            attitude_residual_deg=att.residual_deg,
+            max_residual_deg=att.max_residual_deg,
+            n_observed_stars=len(stars),
+            n_matched_stars=rec.n_matched,
+            n_inlier_stars=att.n_inliers if att.is_valid else rec.n_inliers,
+            n_outlier_stars=att.n_outliers,
+            identified_stars=rec.identified_stars,
+            detection_time_ms=detection_ms,
+            feature_extraction_time_ms=feature_ms,
+            recognition_time_ms=recognition_ms,
+            attitude_time_ms=attitude_ms,
+            total_time_ms=total_ms,
         )
 
     except Exception as exc:
-        total_time_ms = (time.perf_counter() - t_total_start) * 1000.0
+        total_ms = (time.perf_counter() - t_total) * 1000.0
         return NavigationResult(
             timestamp=timestamp,
             status="ERROR",
-            total_time_ms=total_time_ms,
+            attitude_status="FAILURE",
+            total_time_ms=total_ms,
             error_message=str(exc),
         )
 
@@ -228,64 +248,38 @@ def run_full_pipeline(
     catalog_index: CatalogIndex,
     neural_model=None,
 ) -> NavigationResult:
-    """Full pipeline from raw image file or array to NavigationResult.
-
-    Includes preprocessing (background subtraction, noise reduction,
-    normalization) before running the navigation pipeline.
-
-    Parameters
-    ----------
-    image_path_or_array : str, Path, or np.ndarray
-        Path to an image file or a pre-loaded numpy array.
-    config : dict
-        Project configuration dict.
-    catalog_index : CatalogIndex
-        Pre-built indexed star catalog.
-    neural_model : optional
-        Trained neural model for prior.
-
-    Returns
-    -------
-    NavigationResult
-        Complete navigation result.
-    """
-    t_total_start = time.perf_counter()
+    """Full pipeline including preprocessing from raw image or array."""
+    t_total = time.perf_counter()
     timestamp = time.time()
 
     try:
-        # Load image if path provided
         t0 = time.perf_counter()
         if isinstance(image_path_or_array, np.ndarray):
-            raw_image = image_path_or_array.copy()
+            raw = image_path_or_array.copy()
         else:
             from pathlib import Path
             import cv2
-            img_path = Path(image_path_or_array)
-            raw_image = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
-            if raw_image is None:
-                raise FileNotFoundError(f"Could not load image: {img_path}")
-            raw_image = raw_image.astype(np.float32) / 255.0
+            path = Path(image_path_or_array)
+            raw = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+            if raw is None:
+                raise FileNotFoundError(f"Cannot load: {path}")
+            raw = raw.astype(np.float32) / 255.0
 
-        # Preprocessing: background subtraction, noise reduction, normalization
-        image = _preprocess_image(raw_image, config)
-        preprocessing_time_ms = (time.perf_counter() - t0) * 1000.0
+        image = _preprocess_image(raw, config)
+        preprocess_ms = (time.perf_counter() - t0) * 1000.0
 
-        # Run navigation on preprocessed image
         result = run_navigation(image, config, catalog_index, neural_model)
-
-        # Update preprocessing time and total time
-        result.preprocessing_time_ms = preprocessing_time_ms
-        result.total_time_ms = (time.perf_counter() - t_total_start) * 1000.0
+        result.preprocessing_time_ms = preprocess_ms
+        result.total_time_ms = (time.perf_counter() - t_total) * 1000.0
         result.timestamp = timestamp
-
         return result
 
     except Exception as exc:
-        total_time_ms = (time.perf_counter() - t_total_start) * 1000.0
         return NavigationResult(
             timestamp=timestamp,
             status="ERROR",
-            total_time_ms=total_time_ms,
+            attitude_status="FAILURE",
+            total_time_ms=(time.perf_counter() - t_total) * 1000.0,
             error_message=str(exc),
         )
 
@@ -295,94 +289,81 @@ def run_full_pipeline(
 # ---------------------------------------------------------------------------
 
 
-def _estimate_attitude_from_recognition(
-    rec_output: RecognitionOutput,
+def _attitude_from_recognition(
+    rec: RecognitionOutput,
     config: dict,
 ) -> AttitudeEstimate:
-    """Extract correspondences from RecognitionOutput and estimate attitude.
-
-    Parameters
-    ----------
-    rec_output : RecognitionOutput
-        Output from run_recognition().
-    config : dict
-        Project configuration dict.
-
-    Returns
-    -------
-    AttitudeEstimate
-    """
-    from src.navigation.attitude_estimator import AttitudeEstimate
-
-    if len(rec_output.identified_stars) < 2:
+    """Extract Phase 4 inlier correspondences and run Phase 5 attitude estimation."""
+    if not rec.identified_stars or len(rec.identified_stars) < 2:
         return AttitudeEstimate(
-            quaternion=np.array([1.0, 0.0, 0.0, 0.0]),
-            rotation_matrix=np.eye(3),
-            euler_angles_deg=np.zeros(3),
-            residual_deg=float("nan"),
-            num_correspondences=len(rec_output.identified_stars),
+            num_correspondences=len(rec.identified_stars),
             is_valid=False,
             attitude_confidence=0.0,
+            n_inliers=0,
+            n_outliers=len(rec.identified_stars),
         )
 
-    obs_vecs = np.array([s.observed_unit_vec for s in rec_output.identified_stars])
-    cat_vecs = np.array([s.catalog_unit_vec for s in rec_output.identified_stars])
-    weights = np.array([max(s.confidence, 1e-6) for s in rec_output.identified_stars])
+    obs_vecs = np.array([s.observed_unit_vec for s in rec.identified_stars])
+    cat_vecs = np.array([s.catalog_unit_vec for s in rec.identified_stars])
+    # Use Phase 4 per-star confidence as weights
+    weights = np.array([max(s.confidence, 1e-6) for s in rec.identified_stars])
 
     return estimate_attitude(obs_vecs, cat_vecs, config, weights=weights)
 
 
+def _determine_status(
+    rec: RecognitionOutput,
+    att: AttitudeEstimate,
+    config: dict,
+) -> tuple:
+    """Return (navigation_status, attitude_status) strings."""
+    nav_cfg = config.get("navigation", {})
+    min_stars = int(nav_cfg.get("min_correspondences", 2))
+
+    if rec.n_inliers < min_stars:
+        return "INSUFFICIENT_STARS", "FAILURE"
+
+    if rec.status == RecognitionStatus.FAILURE:
+        return "FAILURE", "FAILURE"
+
+    if not att.is_valid:
+        return "ATTITUDE_FAILURE", "FAILURE"
+
+    if rec.status == RecognitionStatus.SUCCESS and att.attitude_confidence >= 0.6:
+        return "SUCCESS", "DETERMINED"
+    elif rec.status in (RecognitionStatus.PARTIAL, RecognitionStatus.SUCCESS):
+        return "PARTIAL", "PARTIAL"
+    else:
+        return "LOW_CONFIDENCE", "LOW_CONFIDENCE"
+
+
 def _preprocess_image(image: np.ndarray, config: dict) -> np.ndarray:
-    """Apply background subtraction, noise reduction, and normalization.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        Raw 2D float32 image, values in [0, 1].
-    config : dict
-        Project configuration dict. Reads from config['preprocessing'].
-
-    Returns
-    -------
-    np.ndarray
-        Preprocessed float32 image.
-    """
+    """Background subtraction, noise reduction, normalization."""
     from scipy.ndimage import median_filter, gaussian_filter
 
-    pp_cfg = config.get("preprocessing", {})
-    result = image.astype(np.float32)
+    pp = config.get("preprocessing", {})
+    img = image.astype(np.float32)
 
-    # Background subtraction
-    if pp_cfg.get("background_subtraction", True):
-        method = pp_cfg.get("background_method", "median_filter")
+    if pp.get("background_subtraction", True):
+        method = pp.get("background_method", "median_filter")
         if method == "median_filter":
-            filter_size = int(pp_cfg.get("background_filter_size", 31))
-            bg = median_filter(result, size=filter_size)
-            result = result - bg
-            result = np.clip(result, 0.0, None)
+            bg = median_filter(img, size=int(pp.get("background_filter_size", 31)))
+            img = np.clip(img - bg, 0.0, None)
         elif method == "constant":
-            bg_level = float(pp_cfg.get("background_level", 0.02))
-            result = np.clip(result - bg_level, 0.0, None)
+            img = np.clip(img - float(pp.get("background_level", 0.02)), 0.0, None)
 
-    # Noise reduction
-    if pp_cfg.get("noise_reduction", True):
-        method = pp_cfg.get("noise_method", "gaussian")
-        if method == "gaussian":
-            sigma = float(pp_cfg.get("noise_sigma", 0.8))
-            result = gaussian_filter(result, sigma=sigma).astype(np.float32)
+    if pp.get("noise_reduction", True):
+        if pp.get("noise_method", "gaussian") == "gaussian":
+            img = gaussian_filter(img, sigma=float(pp.get("noise_sigma", 0.8))).astype(np.float32)
 
-    # Normalization
-    normalization = pp_cfg.get("normalization", "min_max")
-    if normalization == "min_max":
-        lo = float(result.min())
-        hi = float(result.max())
+    norm = pp.get("normalization", "min_max")
+    if norm == "min_max":
+        lo, hi = float(img.min()), float(img.max())
         if hi > lo:
-            result = (result - lo) / (hi - lo)
-    elif normalization == "z_score":
-        mean = float(result.mean())
-        std = float(result.std())
+            img = (img - lo) / (hi - lo)
+    elif norm == "z_score":
+        mean, std = float(img.mean()), float(img.std())
         if std > 1e-8:
-            result = (result - mean) / std
-            result = np.clip(result, 0.0, 1.0)
+            img = np.clip((img - mean) / std, 0.0, 1.0)
 
-    return result.astype(np.float32)
+    return img.astype(np.float32)
