@@ -307,7 +307,7 @@ class TestNavigationSmoke:
         from src.navigation.navigator import run_navigation
         img=np.zeros((512,512),dtype=np.float32)
         result=run_navigation(img,CFG,cidx,neural_model=None)
-        assert result.status in ("FAILURE","ERROR","LOW_CONFIDENCE")
+        assert result.status in ("FAILURE","ERROR","LOW_CONFIDENCE","INSUFFICIENT_STARS")
 
     def test_pipeline_returns_navigation_result(self, cidx):
         from src.navigation.navigator import run_navigation, NavigationResult
