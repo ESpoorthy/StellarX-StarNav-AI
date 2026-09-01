@@ -43,3 +43,8 @@ pytest>=8.0,<9.0
 # Notebook support (optional, for running .ipynb files)
 jupyter>=1.0,<2.0
 ipykernel>=6.29,<7.0
+
+# ── Phase 7 — Demonstration UI additions ─────────────────────────────────────
+
+# Watchdog backend for Streamlit auto-reload on Windows (optional but recommended)
+watchdog>=4.0,<5.0
