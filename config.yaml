@@ -158,6 +158,15 @@ dataset:
   metadata_file: data/raw/metadata.json             # ground-truth metadata for all samples
   image_format: png                                 # "png" | "tiff"  (lossless)
 
+# ── Optimization (Phase 6) ────────────────────────────────────────────────────
+optimization:
+  vectorize: true              # use vectorized NumPy ops in recognition/attitude
+  n_threads: 0                 # CPU threads for NumPy (0 = system default)
+  cache_catalog: true          # keep CatalogIndex in memory across calls
+  n_warmup_runs: 3             # warmup runs before timed benchmark
+  benchmark_seed: 30000        # random seed for benchmark image generation
+  edge_mode: false             # reduce catalog size for edge deployment
+
 # ── Application (Streamlit) ───────────────────────────────────────────────────
 application:
   host: "localhost"
