@@ -115,10 +115,14 @@ Each stage is a distinct, independently testable component. The pipeline is desi
 - Position estimation where applicable
 - Navigation output formatting
 
-### Phase 6 — Optimization
-- Inference benchmarking
-- CPU and memory optimization
-- Lightweight / edge deployment experiments
+### Phase 6 — Optimization ✅ Complete
+- Reproducible inference benchmarking with cold-start vs warm-inference separation
+- Per-component latency profiling and bottleneck identification
+- Vectorized NumPy RANSAC, Wahba/SVD, and pairwise-angle computation
+- tracemalloc peak and current memory measurement
+- OptimizedPipeline with catalog cached once vs BaselinePipeline for comparison
+- Edge deployment configuration and hardware profiles (Raspberry Pi 4, Jetson Nano, NUC)
+- CPU-only inference, no GPU required
 
 ### Phase 7 — Demonstration
 - Streamlit interactive interface
