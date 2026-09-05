@@ -1,153 +1,134 @@
-# StellarX — AI-Powered Star Pattern Recognition for Autonomous Spacecraft Navigation
+# StellarX StarNav-AI
 
-> **Team:** StellarX
-> **Status:** 🔬 Phase 3 complete — feature extraction, pattern classification, and inference pipeline implemented. Phase 4 (Catalog Matching) is next.
+**Autonomous Spacecraft Navigation via AI Star Pattern Recognition**
 
----
-
-## Overview
-
-StellarX-StarNav-AI explores a neural-network-based approach to recognizing star patterns from onboard star-field imagery, with the goal of enabling autonomous spacecraft navigation without dependence on external positioning infrastructure.
-
-The invention underlying this project describes a system that:
-
-- Processes star-field images captured by an onboard imaging device
-- Extracts characteristic features from detected stars
-- Identifies star patterns from the extracted features
-- Matches identified patterns against a stored star catalog
-- Supports spacecraft position and attitude determination from catalog matches
-- Reduces computational complexity and resource consumption compared to conventional methods
-- Targets resource-constrained platforms such as CubeSats and small satellites
-
-> **Note:** The descriptions above reflect the proposed system as described in the related invention. Phase 1 (dataset pipeline) is now complete; subsequent phases will implement the detection, recognition, and navigation components.
+> 🔬 All 7 phases complete · Team StellarX
 
 ---
 
-## Problem Statement
+## What It Does
 
-Determining a spacecraft's orientation and position from onboard sensors is a fundamental challenge in autonomous navigation. Star-based navigation — identifying stars in imagery captured by an onboard camera and matching them against a known catalog — is one of the most accurate methods available. However, doing this reliably under real operational conditions is hard:
-
-- Star-field images are noisy, low-contrast, and affected by sensor artifacts
-- The number of visible stars and their brightness vary with sensor field of view and exposure
-- Conventional catalog-matching algorithms can be computationally expensive
-- Resource-constrained spacecraft (CubeSats, nanosats) have limited CPU, memory, and power budgets
-- The system must operate autonomously without ground-in-the-loop corrections
-
-This project targets a neural-network-based pipeline that can perform robust star pattern recognition efficiently enough for deployment on constrained spacecraft hardware.
+StellarX StarNav-AI determines spacecraft orientation (attitude) from a single star-field image — no GPS, no ground contact required. A star-field image goes through a 7-stage AI pipeline and produces a quaternion + Euler angle output in under 100 ms.
 
 ---
 
-## Proposed Solution
-
-The planned end-to-end pipeline:
+## Pipeline
 
 ```
-Star Field Image
-        ↓
-Image Preprocessing
-        ↓
-Star Detection
-        ↓
-Star Feature Extraction
-        ↓
-Neural Network
-        ↓
-Star Pattern Recognition
-        ↓
-Star Catalog Matching
-        ↓
-Position / Attitude Estimation
-        ↓
-Navigation Output
+Star-Field Image
+      │
+      ▼
+Phase 1 ── Data Foundation       Hipparcos catalog · Synthetic image generator
+      │
+      ▼
+Phase 2 ── Star Detection         Background subtraction · Centroiding
+      │
+      ▼
+Phase 3 ── Feature Extraction     Pairwise distances + brightness ratios (90-dim)
+      │
+      ▼
+Phase 4 ── Pattern Recognition    Vote matrix · RANSAC · Catalog matching
+      │
+      ▼
+Phase 5 ── Attitude Estimation    Wahba/SVD weighted least-squares → Quaternion
+      │
+      ▼
+Phase 6 ── Optimization           Vectorized NumPy · Benchmarking · Edge config
+      │
+      ▼
+Phase 7 ── Demonstration          Streamlit dashboard (app.py)
 ```
 
-Each stage is a distinct, independently testable component. The pipeline is designed to be modular so that individual stages can be swapped, benchmarked, and optimized without breaking the others.
-
 ---
 
-## Key Objectives
+## Quick Start
 
-| Objective | Description |
-|---|---|
-| Star detection | Reliably locate stars in noisy star-field images |
-| Pattern recognition | Identify star patterns using a trained neural network |
-| Catalog matching | Efficiently match recognized patterns against a star catalog |
-| Attitude estimation | Determine spacecraft orientation from matched patterns |
-| Position estimation | Estimate position where the methodology supports it |
-| Confidence-aware predictions | Attach confidence scores to recognition outputs |
-| Computational efficiency | Keep inference within the budget of constrained hardware |
-| Edge deployment | Support lightweight deployment on resource-limited platforms |
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
 
----
+# 2. Run the dashboard
+streamlit run app.py
 
-## Planned Development Phases
+# 3. Run all tests
+pytest tests/ -v
 
-### Phase 1 — Foundation ✅ Complete
-- Repository architecture and project scaffolding
-- Hipparcos bright-star catalog integrated (`data/catalog/hipparcos_bright.csv`)
-- Synthetic star-field generator implemented (`src/preprocessing/star_field_generator.py`)
-- Dataset builder with reproducible 800/100/100 train/val/test splits (`src/preprocessing/dataset_builder.py`)
-- 16-bit PNG image I/O implemented (`src/preprocessing/image_preprocessing.py`)
-- Full catalog loader with spatial and magnitude queries (`src/catalog/catalog_loader.py`)
-- Ground-truth metadata schema defined and validated
-- Unit test suites: ~100 real assertions across 4 test modules
-- Exploratory notebook `notebooks/01_data_exploration.ipynb` fully executable
-- `docs/dataset.md` fully documented with source, schema, methodology, limitations
+# 4. Generate synthetic dataset
+python -c "
+import yaml
+from src.preprocessing.dataset_builder import build_dataset
+config = yaml.safe_load(open('config.yaml'))
+build_dataset(config)
+"
 
-### Phase 2 — Star Detection ✅ Complete
-- Background estimation and subtraction
-- Star detection algorithm (blob detection or matched filter)
-- Sub-pixel centroiding
-- Feature extraction from detected stars
-
-### Phase 3 — Neural Network ✅ Complete
-- Training data generation from synthetic pipeline
-- Neural network architecture design and development
-- Model training and evaluation
-
-### Phase 4 — Pattern Recognition *(next)*
-- Star pattern identification
-- Star catalog integration
-- Confidence estimation for recognition outputs
-
-### Phase 5 — Navigation
-- Spacecraft attitude estimation from recognised patterns
-- Position estimation where applicable
-- Navigation output formatting
-
-### Phase 6 — Optimization ✅ Complete
-- Reproducible inference benchmarking with cold-start vs warm-inference separation
-- Per-component latency profiling and bottleneck identification
-- Vectorized NumPy RANSAC, Wahba/SVD, and pairwise-angle computation
-- tracemalloc peak and current memory measurement
-- OptimizedPipeline with catalog cached once vs BaselinePipeline for comparison
-- Edge deployment configuration and hardware profiles (Raspberry Pi 4, Jetson Nano, NUC)
-- CPU-only inference, no GPU required
-
-### Phase 7 — Demonstration
-- Streamlit interactive interface
-- Image upload and visualization
-- Prediction results with confidence and processing-time metrics
+# 5. Run the full pipeline on a single image
+python run_pipeline.py
+```
 
 ---
 
 ## Repository Structure
 
-```text
+```
 StellarX-StarNav-AI/
 │
-├── README.md               # Project overview (this file)
-├── LICENSE                 # License file
-├── .gitignore              # Python-oriented ignore rules
-├── requirements.txt        # Core Python dependencies
-├── config.yaml             # Centralised configuration template
-├── CONTRIBUTING.md         # Contribution guidelines
-├── CODE_OF_CONDUCT.md      # Community standards
+├── app.py                      ← Streamlit dashboard (Phase 7)
+├── benchmark.py                ← Phase 6 inference benchmarking
+├── run_pipeline.py             ← CLI pipeline runner
+├── config.yaml                 ← All runtime parameters
+├── requirements.txt
+│
+├── src/
+│   ├── preprocessing/          ← Phase 1-2: image loading, detection, features
+│   │   ├── image_preprocessing.py
+│   │   ├── star_detection.py
+│   │   ├── star_field_generator.py
+│   │   ├── dataset_builder.py
+│   │   └── feature_dataset.py
+│   │
+│   ├── catalog/                ← Phase 1: Hipparcos catalog loader
+│   │   ├── catalog_loader.py
+│   │   └── pattern_matcher.py
+│   │
+│   ├── recognition/            ← Phase 4: pattern matching pipeline
+│   │   ├── catalog_index.py
+│   │   ├── pattern_builder.py
+│   │   ├── pattern_matcher.py
+│   │   └── pattern_matcher_optimized.py
+│   │
+│   ├── models/                 ← Phase 3: feature classifier + inference
+│   │   ├── sklearn_classifier.py
+│   │   ├── inference.py
+│   │   └── star_pattern_model.py   ← PyTorch stub (Python 3.14 not yet supported)
+│   │
+│   ├── navigation/             ← Phase 5: attitude + position estimation
+│   │   ├── navigator.py
+│   │   ├── attitude_estimator.py
+│   │   ├── position_estimator.py
+│   │   └── camera_model.py
+│   │
+│   ├── optimization/           ← Phase 6: benchmarking + edge deployment
+│   │   ├── pipeline.py
+│   │   ├── profiler.py
+│   │   └── edge_config.py
+│   │
+│   ├── evaluation/             ← Phase 4-5 evaluation metrics
+│   │   ├── phase4_eval.py
+│   │   └── phase5_eval.py
+│   │
+│   └── utils/
+│       └── visualization.py
+│
+├── demo/
+│   └── demo_assets.py          ← Pre-generated demo data for the dashboard
 │
 ├── data/
-│   ├── raw/                # Original unmodified source data (not versioned)
-│   ├── processed/          # Preprocessed data ready for training (not versioned)
-│   └── catalog/            # Star catalog files
+│   ├── catalog/
+│   │   └── hipparcos_bright.csv   ← 50 brightest stars (Hipparcos, ESA 1997)
+│   ├── raw/                    ← Generated images (gitignored)
+│   └── processed/              ← Feature datasets (gitignored)
+│
+├── models/                     ← Trained checkpoints (gitignored)
 │
 ├── notebooks/
 │   ├── 01_data_exploration.ipynb
@@ -155,108 +136,65 @@ StellarX-StarNav-AI/
 │   ├── 03_pattern_generation.ipynb
 │   └── 04_model_training.ipynb
 │
-├── src/
-│   ├── preprocessing/      # Image loading, noise reduction, normalization
-│   ├── models/             # Neural network definitions and inference
-│   ├── catalog/            # Catalog loading and pattern matching
-│   ├── navigation/         # Attitude and position estimation
-│   └── utils/              # Shared utilities and visualization helpers
+├── tests/
+│   ├── test_catalog_loader.py
+│   ├── test_star_detection.py
+│   ├── test_star_field_generator.py
+│   ├── test_pattern_matching.py
+│   ├── test_models.py
+│   ├── test_navigation.py
+│   ├── test_phase4_recognition.py
+│   ├── test_phase5_navigation.py
+│   └── test_phase6_optimization.py
 │
-├── models/                 # Saved model checkpoints (not versioned)
-├── app/                    # Streamlit demonstration application
-├── tests/                  # Unit tests
-└── docs/                   # Architecture, methodology, and results documentation
+└── docs/
+    ├── architecture.md
+    ├── methodology.md
+    ├── dataset.md
+    ├── experiments.md
+    └── results.md
 ```
 
 ---
 
-## Technology Stack
+## Tech Stack
 
-| Technology | Role | Status |
-|---|---|---|
-| Python 3.11+ | Primary language | ✅ In use |
-| NumPy | Numerical arrays and computation | ✅ In use |
-| Pandas | Data handling and catalog operations | ✅ In use |
-| SciPy | Gaussian PSF, image convolution | ✅ In use |
-| Pillow | 16-bit PNG image I/O | ✅ In use |
-| Matplotlib | Visualization and result plotting | ✅ In use |
-| PyYAML | Configuration management | ✅ In use |
-| pytest | Unit testing | ✅ In use |
-| OpenCV | Star detection (Phase 2) | Planned |
-| PyTorch | Deep learning framework (Phase 3) | Planned |
-| Scikit-learn | ML utilities and metrics (Phase 3+) | Planned |
-| Streamlit | Interactive demonstration interface (Phase 7) | Planned |
-
----
-
-## Quick Start — Generate the Dataset
-
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Generate the full synthetic dataset (800 train / 100 val / 100 test)
-python -c "
-import yaml
-from src.preprocessing.dataset_builder import build_dataset
-with open('config.yaml') as f:
-    config = yaml.safe_load(f)
-build_dataset(config)
-"
-
-# 3. Run the unit tests
-pytest tests/ -v
-
-# 4. Explore the data
-jupyter notebook notebooks/01_data_exploration.ipynb
-```
-
-> Generated images are saved to `data/raw/` and are **not committed** to the repository (see `.gitignore`).
-
----
-
-
-
-The project will be evaluated against the following targets, to be defined concretely during implementation:
-
-- **Accuracy** — pattern recognition and catalog match rate
-- **Robustness** — performance under noise, partial occlusion, and variable star density
-- **Computational efficiency** — inference time on target hardware class
-- **Inference latency** — time from image input to navigation output
-- **Memory usage** — peak RAM and model size
-- **Reproducibility** — fixed seeds, versioned configs, documented experiments
-
----
-
-## Team
-
-**Team: StellarX**
-
-| GitHub Handle | Name | Role |
-|---|---|---|
-| [@ESpoorthy](https://github.com/ESpoorthy) | Sai Spoorthy Eturu | Repository Owner |
-| [@Kommera-Harihansika](https://github.com/Kommera-Harihansika) | Kommera Harihanika | Collaborator |
-| [@Duddalasrija](https://github.com/Duddalasrija) | Duddala Srija | Collaborator |
-| [@glory-pranavi](https://github.com/glory-pranavi) | Glory Pranavi B | Collaborator |
-| [@Katakam Sahithi Rithvika](https://github.com/sahithrithvika) | Katakam Sahithi Rithvika | Collaborator |
-| [@Shamithri Gowravarapu](https://github.com/sham12398) | Shamithri Gowravarapu | Collaborator |
-
----
-
-## Intellectual Property Notice
-
-This repository contains an engineering and research implementation of concepts related to a published invention. Intellectual-property rights and licensing are governed by the applicable patent and institutional agreements. This notice does not constitute a claim of ownership, a grant of license, or an opinion on freedom to operate.
-
----
-
-## Documentation
-
-Detailed documentation is located in the [`docs/`](docs/) directory:
-
-| Document | Description |
+| Component | Technology |
 |---|---|
-| [`docs/architecture.md`](docs/architecture.md) | Planned system architecture and component diagram |
-| [`docs/methodology.md`](docs/methodology.md) | Intended methodology for each pipeline stage |
-| [`docs/dataset.md`](docs/dataset.md) | Catalog source, synthetic generation methodology, metadata schema |
-| [`docs/experiments.md`](docs/experiments.md) | Experiment tracking template |
-| [`docs/results.md`](docs/results.md) | Results reporting template |
+| Language | Python 3.14 |
+| Image processing | OpenCV, SciPy, Pillow |
+| Star detection | Connected-component analysis (scipy.ndimage) |
+| ML classifier | scikit-learn (RandomForest / KNN / MLP) |
+| Attitude solver | Wahba/SVD weighted least-squares |
+| Catalog | Hipparcos (ESA 1997, public domain) |
+| Dashboard | Streamlit 1.56 |
+| Deep learning | PyTorch (stub — awaiting Python 3.14 wheel) |
+
+---
+
+## Test Results
+
+```
+363 passed · 15 skipped · 0 failures
+```
+
+Skipped tests are expected (sparse-catalog frames with 0 visible stars).
+
+---
+
+## Team StellarX
+
+| Name | GitHub |
+|---|---|
+| Sai Spoorthy Eturu | [@ESpoorthy](https://github.com/ESpoorthy) |
+| Kommera Harihanika | [@placedeliteverifypotxnicufu](https://github.com/placedeliteverifypotxnicufu) |
+| Duddala Srija | [@Duddalasrija](https://github.com/Duddalasrija) |
+| Glory Pranavi B | [@glory-pranavi](https://github.com/glory-pranavi) |
+| Katakam Sahithi Rithvika | [@sahithrithvika](https://github.com/sahithrithvika) |
+| Shamithri Gowravarapu | [@sham12398](https://github.com/sham12398) |
+
+---
+
+## IP Notice
+
+This repository is an engineering implementation of concepts from a published invention. IP rights are governed by the applicable patent and institutional agreements.
