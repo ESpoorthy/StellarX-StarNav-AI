@@ -21,7 +21,7 @@ import math
 import time
 import traceback
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -620,7 +620,8 @@ def _plot_nav_summary(result) -> bytes:
     """Phase 5 — attitude wheel + timing bar chart."""
     if not HAS_MPL:
         return b""
-    fig = plt.figure(figsize=(10, 4.5), facecolor=_FIG_BG)
+    fig = plt.figure(figsize=(10, 4.5), facecolor=_FIG_BG,
+                     layout="constrained")
     gs = fig.add_gridspec(1, 2, wspace=0.35)
 
     # ── Euler angles polar wheel ──────────────────────────────────────────
@@ -672,7 +673,6 @@ def _plot_nav_summary(result) -> bytes:
                   color=_ACCENT_C, fontsize=8, fontweight="bold", pad=6, loc="left")
     ax2.yaxis.tick_right()
     ax2.yaxis.set_tick_params(labelcolor=_TEXT_C)
-    plt.tight_layout(pad=0.8)
     return _fig_png(fig)
 
 
@@ -763,7 +763,7 @@ def _init_state():
 # =============================================================================
 
 def _header():
-    ts  = datetime.utcnow().strftime("%Y-%m-%d  %H:%M:%S  UTC")
+    ts  = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d  %H:%M:%S  UTC")
     mode = "OPERATIONAL" if _PIPELINE_OK else "DEMO MODE"
     mode_col = C_SUCCESS if _PIPELINE_OK else C_WARNING
 
@@ -1050,7 +1050,7 @@ def _page_analyse():
             unsafe_allow_html=True,
         )
         if st.button("⭐  Load Sample Mission Data", key="load_sample",
-                     use_container_width=True):
+                     width='stretch'):
             st.session_state["demo_pending"] = True
             st.rerun()
 
@@ -1077,10 +1077,10 @@ def _page_analyse():
     with col_img:
         if HAS_MPL:
             st.image(_plot_original(raw_image), caption="Raw input image",
-                     use_container_width=True)
+                     width='stretch')
         else:
             img8 = (np.clip(raw_image, 0, 1) * 255).astype(np.uint8)
-            st.image(img8, caption="Raw input image", use_container_width=True)
+            st.image(img8, caption="Raw input image", width='stretch')
 
     with col_info:
         h, w = raw_image.shape
@@ -1104,7 +1104,7 @@ def _page_analyse():
     col_btn, col_note = st.columns([1, 3])
     with col_btn:
         run_clicked = st.button("▶  RUN FULL ANALYSIS", key="run_btn",
-                                use_container_width=True)
+                                width='stretch')
 
     with col_note:
         st.markdown(
@@ -1182,7 +1182,7 @@ def _page_analyse():
 
     # Add to history
     st.session_state["history"].append({
-        "time":       datetime.utcnow().strftime("%H:%M:%S"),
+        "time":       datetime.now(timezone.utc).replace(tzinfo=None).strftime("%H:%M:%S"),
         "image":      image_name,
         "status":     getattr(result, "status", "UNKNOWN"),
         "stars":      getattr(result, "n_inlier_stars", 0),
@@ -1259,7 +1259,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
             if HAS_MPL:
                 st.image(_plot_original(preprocessed),
                          caption="Loaded image (normalised display)",
-                         use_container_width=True)
+                         width='stretch')
         with c2:
             h, w = preprocessed.shape[:2]
             st.markdown(
@@ -1282,7 +1282,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
             if HAS_MPL and stars:
                 st.image(_plot_detections(preprocessed, stars, identified or None),
                          caption=f"{len(stars)} stars detected",
-                         use_container_width=True)
+                         width='stretch')
             elif not stars:
                 st.info("No stars detected in this image.")
 
@@ -1315,7 +1315,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
                     f"margin:10px 0 4px'>Star Centroids (top 15)</div>",
                     unsafe_allow_html=True,
                 )
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.dataframe(df, width='stretch', hide_index=True)
 
     # ── Tab 3: Pattern ───────────────────────────────────────────────────
     with tab_pat:
@@ -1325,7 +1325,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
             if HAS_MPL:
                 st.image(_plot_pattern(preprocessed, stars, identified if identified else None),
                          caption="Geometric pattern overlay",
-                         use_container_width=True)
+                         width='stretch')
 
         with c2:
             mp = getattr(result, "matched_pattern", None)
@@ -1384,7 +1384,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
                     "Confidence": round(float(getattr(m, "confidence", 0)), 3),
                     "Brightness": round(float(getattr(m, "brightness",  0)), 4),
                 })
-            st.dataframe(pd.DataFrame(cat_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(cat_rows), width='stretch', hide_index=True)
 
     # ── Tab 4: Navigation ────────────────────────────────────────────────
     with tab_nav:
@@ -1443,7 +1443,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
             nav_png = _plot_nav_summary(result)
             if nav_png:
                 st.image(nav_png, caption="Phase 5 attitude + Phase 6 timing",
-                         use_container_width=True)
+                         width='stretch')
 
         # Timing table
         st.markdown(f"<hr style='border-color:{C_BORDER};margin:14px 0 10px'>",
@@ -1487,7 +1487,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
 
         report = {
             "stellarx_version": "1.0.0",
-            "timestamp":        datetime.utcnow().isoformat() + "Z",
+            "timestamp":        datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
             "demo_mode":        is_demo,
             "status":           status,
             "attitude_status":  att_status,
@@ -1529,14 +1529,14 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
             st.code(json_str[:1200] + ("\n…" if len(json_str) > 1200 else ""),
                     language="json")
         with col_dl:
-            ts_str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            ts_str = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
             st.download_button(
                 label="⬇️  Download JSON Report",
                 data=json_str,
                 file_name=f"stellarx_report_{ts_str}.json",
                 mime="application/json",
                 key="dl_report",
-                use_container_width=True,
+                width='stretch',
             )
             if HAS_MPL:
                 img_b64 = _arr_to_b64_png(preprocessed)
@@ -1548,7 +1548,7 @@ def _render_results(result, preprocessed, stars, is_demo: bool = False):
                         file_name=f"stellarx_image_{ts_str}.png",
                         mime="image/png",
                         key="dl_image",
-                        use_container_width=True,
+                        width='stretch',
                     )
 
 
@@ -1609,7 +1609,7 @@ def _page_mission():
     elif HAS_PD:
         df_hist = pd.DataFrame(history)
         df_hist.index = range(1, len(df_hist) + 1)
-        st.dataframe(df_hist, use_container_width=True)
+        st.dataframe(df_hist, width='stretch')
     else:
         for i, h in enumerate(reversed(history[-10:]), 1):
             st.markdown(
