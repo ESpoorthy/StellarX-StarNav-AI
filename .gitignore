@@ -53,14 +53,25 @@ models/*.bin
 models/*.pkl
 !models/.gitkeep
 
-# ----- Logs -----
+# ----- Logs & output artifacts -----
 *.log
 logs/
+*.txt
+# But keep requirements.txt and important docs
+!requirements.txt
 
 # ----- macOS metadata -----
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# ----- Windows scripts -----
+*.bat
+*.ps1
+
+# ----- Office / legacy documents -----
+*.doc
+*.docx
 
 # ----- Distribution / packaging -----
 dist/
@@ -74,3 +85,7 @@ tmp/
 temp/
 *.tmp
 *.bak
+
+# ----- Demo generated assets (reproducible, not needed in git) -----
+demo/demo_result.pkl
+demo/demo_stars.pkl
