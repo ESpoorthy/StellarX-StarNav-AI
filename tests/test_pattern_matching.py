@@ -1,17 +1,11 @@
 """
 test_pattern_matching.py
 ========================
-Unit tests for src.catalog.catalog_loader (query methods — Phase 1 now
-implemented) and src.catalog.pattern_matcher (Phase 4 stub).
+Unit tests for src.catalog.catalog_loader (query methods).
 
-Phase 1 updates
----------------
-- TestLoadCatalog: replaced NotImplementedError stub with real assertions
-  against the bundled Hipparcos catalog.
-- TestStarCatalogInit, TestCatalogQueryById, TestCatalogQueryByRegion:
-  expanded with working assertions now that StarCatalog is fully implemented.
-- TestMatchPattern: still raises NotImplementedError — pattern matching is
-  Phase 4.
+Note: src/catalog/pattern_matcher.py was a dead stub and has been removed.
+The live pattern matching pipeline is in src/recognition/pattern_matcher.py
+and is tested in tests/test_phase4_recognition.py.
 
 Run with:
     pytest tests/test_pattern_matching.py -v
@@ -54,26 +48,6 @@ def sample_star() -> CatalogStar:
         dec_deg=-16.716,
         magnitude=-1.46,
         metadata={"common_name": "Sirius"},
-    )
-
-
-@pytest.fixture()
-def recognition_result_high_confidence() -> RecognitionResult:
-    return RecognitionResult(
-        pattern_id="PAT_001",
-        confidence=0.95,
-        raw_output=None,
-        latency_ms=12.5,
-    )
-
-
-@pytest.fixture()
-def recognition_result_low_confidence() -> RecognitionResult:
-    return RecognitionResult(
-        pattern_id=None,
-        confidence=0.10,
-        raw_output=None,
-        latency_ms=11.0,
     )
 
 
@@ -211,29 +185,7 @@ class TestLoadCatalog:
 
 
 # ---------------------------------------------------------------------------
-# pattern_matcher — Phase 4 stub (still NotImplementedError)
+# Note: src/catalog/pattern_matcher.py was a dead stub and has been removed.
+# The live pattern matching pipeline is in src/recognition/pattern_matcher.py
+# and is tested in tests/test_phase4_recognition.py.
 # ---------------------------------------------------------------------------
-
-
-class TestMatchPattern:
-    def test_raises_not_implemented(
-        self,
-        recognition_result_high_confidence,
-        empty_catalog,
-        evaluation_config,
-    ):
-        """match_pattern must raise NotImplementedError until Phase 4."""
-        from src.catalog.pattern_matcher import match_pattern
-
-        with pytest.raises(NotImplementedError):
-            match_pattern(
-                recognition_result_high_confidence,
-                empty_catalog,
-                evaluation_config,
-            )
-
-    # TODO (Phase 4): add tests for:
-    #   - high-confidence result with matching catalog entry → is_confident=True
-    #   - low-confidence result → is_confident=False
-    #   - result with pattern_id=None → MatchResult with matched_star=None
-    #   - match confidence score is within [0.0, 1.0]

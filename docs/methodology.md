@@ -1,8 +1,8 @@
 # Methodology
 
-> **Living document** — updated as each phase is implemented.
-> Decisions made during implementation replace TBD placeholders.
-> Phase 1 and Phase 2 sections are complete; later sections remain as plans.
+> **Final state — SIH 2026 sprint complete.**
+> All phases 1–7 implemented. Sections reflect actual implementation.
+> Open decisions section lists only genuine future work.
 
 ---
 

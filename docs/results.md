@@ -169,3 +169,48 @@ All reported results are linked to specific experiment records in [`docs/experim
 2. Use the configuration recorded in the experiment entry.
 3. Use the dataset version recorded in the experiment entry.
 4. Run training or evaluation as described in `CONTRIBUTING.md`.
+
+---
+
+## SIH 2026 Sprint — Performance Fix Summary
+
+### Phase 5 Root Cause (identified and fixed)
+
+The apparent "hang at Phase 5" was caused by multiple compounding inefficiencies
+in the Phase 4 recognition pipeline, which blocked the Streamlit UI thread before
+Phase 5 even started.
+
+**Root causes:**
+
+1. **Vote accumulation** — 45 Python calls × 1225-entry Python dict linear scan
+   = ~55,000 Python operations per image. Fixed: vectorized NumPy array comparison.
+
+2. **RANSAC inner loop** — 30 iterations × N Python per-correspondence operations.
+   Fixed: `ransac_inlier_count_vectorized` using matrix multiply.
+
+3. **Wahba B-matrix** — Python for-loop over correspondences.
+   Fixed: `(cat * w[:,None]).T @ obs` vectorized broadcast.
+
+4. **Residual computation** — Python for-loop.
+   Fixed: vectorized `arccos(dot products)`.
+
+5. **Double preprocessing** — `app.py` preprocessed raw, then called `run_full_pipeline`
+   which preprocessed raw again. Fixed: single preprocessing pass.
+
+6. **No input validation** — NaN/Inf vectors could enter the SVD solver silently.
+   Fixed: strip before every solve.
+
+**Result:** pipeline terminates deterministically with bounded RANSAC iterations (30)
+and bounded outlier rejection iterations (3). No infinite loops possible.
+
+### Integrity Check Added
+
+Every attitude solution is now verified post-SVD:
+- `|det(R) − 1| < 0.001`
+- `‖RᵀR − I‖_max < 1e-5`
+- Quaternion norm in [0.999, 1.001]
+- Mean residual < 2.0°
+- Max per-star residual < 3.0°
+- RANSAC inliers ≥ 2
+
+Status: `VALID` / `DEGRADED` / `REJECTED` with explicit rejection reason.
