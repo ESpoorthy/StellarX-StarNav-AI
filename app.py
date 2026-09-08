@@ -731,9 +731,16 @@ def _run_pipeline(raw: np.ndarray):
         return None, raw, [], err
     neural, _ = _load_model(cfg_path)
     try:
+        from src.navigation.navigator import run_navigation
+        import time as _time
+        t0 = _time.perf_counter()
         preprocessed = _preprocess_image(raw.copy(), cfg)
-        stars        = detect_stars(preprocessed, cfg.get("star_detection", {}))
-        result       = run_full_pipeline(raw.copy(), cfg, cidx, neural_model=neural)
+        preprocess_ms = (_time.perf_counter() - t0) * 1000.0
+        stars = detect_stars(preprocessed, cfg.get("star_detection", {}))
+        # Pass preprocessed image directly — avoids double preprocessing
+        result = run_navigation(preprocessed, cfg, cidx, neural_model=neural)
+        result.preprocessing_time_ms = preprocess_ms
+        result.total_time_ms += preprocess_ms
         return result, preprocessed, stars, ""
     except Exception as exc:
         return None, raw, [], f"Pipeline error: {exc}"

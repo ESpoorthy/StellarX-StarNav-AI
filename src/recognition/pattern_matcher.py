@@ -269,13 +269,49 @@ def run_recognition(
         )
 
     # Gather observed and catalog unit vectors for correspondences
-    obs_vecs = np.array([pattern.unit_vectors[i] for i, _ in correspondences])
-    cat_vecs = np.array([catalog_index.get_by_catalog_index(j).unit_vec for _, j in correspondences])
+    obs_vecs_raw = np.array([pattern.unit_vectors[i] for i, _ in correspondences])
+    cat_vecs_raw = np.array([catalog_index.get_by_catalog_index(j).unit_vec for _, j in correspondences])
 
-    # Step 3: RANSAC to find best rotation
+    # Guard: reject NaN/Inf/zero vectors before RANSAC
+    obs_finite = np.isfinite(obs_vecs_raw).all(axis=1)
+    cat_finite = np.isfinite(cat_vecs_raw).all(axis=1)
+    obs_nonzero = np.linalg.norm(obs_vecs_raw, axis=1) > 1e-10
+    cat_nonzero = np.linalg.norm(cat_vecs_raw, axis=1) > 1e-10
+    valid = obs_finite & cat_finite & obs_nonzero & cat_nonzero
+
+    if valid.sum() < 2:
+        elapsed_ms = (time.perf_counter() - t_start) * 1000.0
+        return RecognitionOutput(
+            status=RecognitionStatus.FAILURE,
+            n_observed=n_obs,
+            n_matched=n_matched,
+            n_inliers=0,
+            processing_time_ms=elapsed_ms,
+            neural_pattern_id=neural_pattern_id,
+            neural_confidence=neural_confidence,
+        )
+
+    # Filter and re-index correspondences to valid-only
+    valid_idx = np.where(valid)[0]
+    correspondences = [correspondences[k] for k in valid_idx]
+    obs_vecs = obs_vecs_raw[valid_idx]
+    cat_vecs = cat_vecs_raw[valid_idx]
+
+    # Normalise unit vectors
+    obs_vecs = obs_vecs / np.linalg.norm(obs_vecs, axis=1, keepdims=True)
+    cat_vecs = cat_vecs / np.linalg.norm(cat_vecs, axis=1, keepdims=True)
+
+    # Step 3: RANSAC to find best rotation — use vectorized inlier counting
     best_R = None
     best_inliers: list[int] = []
     n_corr = len(correspondences)
+
+    # Import vectorized ops (always available, defined in same package)
+    from src.recognition.pattern_matcher_optimized import (
+        ransac_inlier_count_vectorized,
+        wahba_svd_vectorized,
+        compute_residuals_vectorized,
+    )
 
     for _ in range(ransac_iters):
         # Pick 2 random correspondences as hypothesis
@@ -291,16 +327,8 @@ def run_recognition(
         if R_hyp is None:
             continue
 
-        # Count inliers
-        inliers = []
-        for k in range(n_corr):
-            pred = R_hyp @ obs_vecs[k]
-            pred = pred / max(np.linalg.norm(pred), 1e-12)
-            dot = float(np.dot(pred, cat_vecs[k]))
-            dot = max(-1.0, min(1.0, dot))
-            residual = math.degrees(math.acos(dot))
-            if residual <= max_residual:
-                inliers.append(k)
+        # Vectorized inlier counting — replaces Python for-loop
+        inliers = ransac_inlier_count_vectorized(R_hyp, obs_vecs, cat_vecs, max_residual)
 
         if len(inliers) > len(best_inliers):
             best_inliers = inliers
@@ -308,29 +336,29 @@ def run_recognition(
 
     n_inliers = len(best_inliers)
 
-    # Step 4: Refine rotation using all inliers
+    # Step 4: Refine rotation using all inliers — vectorized Wahba/SVD
     if n_inliers >= 2 and best_R is not None:
         inlier_obs = obs_vecs[best_inliers]
         inlier_cat = cat_vecs[best_inliers]
         weights = np.ones(n_inliers)
-        refined_R = _wahba_svd(inlier_obs, inlier_cat, weights)
+        refined_R = wahba_svd_vectorized(inlier_obs, inlier_cat, weights)
         if refined_R is not None:
             best_R = refined_R
 
-    # Compute residuals for inlier correspondences
+    # Compute residuals for inlier correspondences — vectorized
     residuals: list[float] = []
     identified_stars: list[IdentifiedStar] = []
 
     if best_R is not None and n_inliers > 0:
-        for k in best_inliers:
-            obs_idx, cat_idx = correspondences[k]
-            pred = best_R @ obs_vecs[k]
-            pred = pred / max(np.linalg.norm(pred), 1e-12)
-            dot = float(np.dot(pred, cat_vecs[k]))
-            dot = max(-1.0, min(1.0, dot))
-            residual = math.degrees(math.acos(dot))
-            residuals.append(residual)
+        # Vectorized residuals for all inlier correspondences
+        inlier_obs_all = obs_vecs[best_inliers]
+        inlier_cat_all = cat_vecs[best_inliers]
+        residuals_arr = compute_residuals_vectorized(best_R, inlier_obs_all, inlier_cat_all)
+        residuals = residuals_arr.tolist()
 
+        for ki, k in enumerate(best_inliers):
+            obs_idx, cat_idx = correspondences[k]
+            residual = residuals[ki]
             cat_star_indexed = catalog_index.get_by_catalog_index(cat_idx)
             cat_star = cat_star_indexed.star
 
@@ -343,7 +371,7 @@ def run_recognition(
                 catalog_dec_deg=cat_star.dec_deg,
                 catalog_unit_vec=cat_star_indexed.unit_vec.copy(),
                 angular_residual_deg=residual,
-                confidence=max(0.0, 1.0 - residual / max_residual),
+                confidence=max(0.0, 1.0 - residual / max(max_residual, 1e-9)),
                 brightness=float(pattern.brightnesses[obs_idx]),
             ))
 

@@ -108,7 +108,54 @@ evaluation:
   confidence_threshold: 0.3      # minimum probability for an accepted prediction
   top_k: 3                       # top-k accuracy metric
 
-# ── Navigation (Phase 5) ─────────────────────────────────────────────────────
+# ── Recognition (Phase 4) ─────────────────────────────────────────────────────
+recognition:
+  # Angular tolerance for vote accumulation (degrees)
+  angle_tolerance_deg: 0.5
+  # RANSAC parameters — BOUNDED to prevent indefinite execution
+  ransac_iterations: 30          # was unbounded; 30 is sufficient for 50-star catalog
+  max_residual_deg: 1.0          # inlier threshold for RANSAC
+  # Minimum inliers for a valid match
+  min_inliers: 2
+  # Confidence thresholds
+  confidence_success: 0.6
+  confidence_partial: 0.3
+
+# ── Camera model (Phase 5) ────────────────────────────────────────────────────
+camera:
+  image_width: 512               # must match dataset.image_width
+  image_height: 512              # must match dataset.image_height
+  fov_deg: 20.0                  # full field of view in degrees
+  cx: 256.0                      # principal point column (pixels)
+  cy: 256.0                      # principal point row (pixels)
+  # focal_px computed from fov_deg if 0: focal_px = (width/2) / tan(fov/2)
+  focal_px: 0.0                  # 0 = auto-compute from fov_deg
+
+# ── Integrity check (Phase 5) ─────────────────────────────────────────────────
+integrity:
+  # Maximum acceptable mean residual for VALID solution
+  max_mean_residual_deg: 2.0
+  # Maximum acceptable per-star residual for VALID solution
+  max_per_star_residual_deg: 3.0
+  # Minimum quaternion norm (should be ~1.0)
+  min_quaternion_norm: 0.999
+  max_quaternion_norm: 1.001
+  # Minimum rotation determinant (should be ~+1.0)
+  min_det: 0.999
+  # Minimum inliers to accept solution
+  min_inliers_valid: 2
+
+# ── Simulation / ground-truth test mode ───────────────────────────────────────
+simulation:
+  # Used by the robustness lab and synthetic validation
+  default_ra_deg: 101.287        # Sirius boresight RA
+  default_dec_deg: -16.716       # Sirius boresight Dec
+  default_roll_deg: 0.0
+  noise_levels: [0.0, 0.005, 0.01, 0.02]
+  false_star_counts: [0, 2, 5]
+  occlusion_fractions: [0.0, 0.25, 0.5]
+
+
 navigation:
   attitude_method: wahba_svd         # Wahba/SVD weighted least-squares
   position_method: unavailable       # single-image position not observable

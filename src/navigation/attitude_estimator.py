@@ -162,11 +162,49 @@ def estimate_attitude(
             n_outliers=n,
         )
 
+    # ── Input validation — guard against NaN / Inf / zero vectors ────────────
+    obs = np.asarray(observed_directions, dtype=np.float64)
+    cat = np.asarray(catalog_directions, dtype=np.float64)
+
+    # Remove NaN / Inf rows
+    finite_mask = (np.isfinite(obs).all(axis=1) &
+                   np.isfinite(cat).all(axis=1))
+
+    # Remove zero-length vectors
+    obs_norms = np.linalg.norm(obs, axis=1)
+    cat_norms = np.linalg.norm(cat, axis=1)
+    nonzero_mask = (obs_norms > 1e-10) & (cat_norms > 1e-10)
+
+    valid_mask = finite_mask & nonzero_mask
+    if valid_mask.sum() < min_corr:
+        return AttitudeEstimate(
+            num_correspondences=n,
+            is_valid=False,
+            attitude_confidence=0.0,
+            n_inliers=0,
+            n_outliers=n,
+        )
+
+    obs = obs[valid_mask]
+    cat = cat[valid_mask]
+
+    # Normalise to unit vectors
+    obs = obs / obs_norms[valid_mask, None]
+    cat = cat / cat_norms[valid_mask, None]
+
     if weights is None:
-        weights = np.ones(n, dtype=np.float64)
+        weights = np.ones(len(obs), dtype=np.float64)
     else:
-        weights = np.asarray(weights, dtype=np.float64).copy()
+        weights = np.asarray(weights, dtype=np.float64)[valid_mask].copy()
         weights = np.clip(weights, 1e-9, None)
+        if not np.isfinite(weights).all():
+            weights = np.ones(len(obs), dtype=np.float64)
+
+    # Remove duplicate catalog IDs — keep highest-weight entry
+    # (duplicate catalog matches would bias the B matrix)
+    # We work on indices; no catalog ID available here, skip dedup at this level
+
+    n = len(obs)   # updated count after filtering
 
     # Iterative outlier rejection + Wahba/SVD
     active = np.ones(n, dtype=bool)
@@ -177,12 +215,15 @@ def estimate_attitude(
         if len(idx) < min_corr:
             break
 
-        obs_a = observed_directions[idx]
-        cat_a = catalog_directions[idx]
+        obs_a = obs[idx]
+        cat_a = cat[idx]
         w_a = weights[idx]
 
         R_new = _wahba_svd(obs_a, cat_a, w_a)
         if R_new is None:
+            break
+        # Guard: reject non-finite R immediately
+        if not np.isfinite(R_new).all():
             break
         R = R_new
 
@@ -206,8 +247,8 @@ def estimate_attitude(
             n_outliers=n,
         )
 
-    # Final residuals for ALL correspondences
-    all_residuals = _compute_residuals(R, observed_directions, catalog_directions)
+    # Final residuals for ALL filtered correspondences
+    all_residuals = _compute_residuals(R, obs, cat)
 
     # Inlier mask based on final outlier threshold
     inlier_mask = all_residuals <= outlier_thresh
@@ -217,7 +258,7 @@ def estimate_attitude(
     mean_residual = float(np.mean(all_residuals[inlier_mask])) if n_inliers > 0 else float("nan")
     max_residual = float(np.max(all_residuals[inlier_mask])) if n_inliers > 0 else float("nan")
 
-    # Validate rotation matrix
+    # Validate rotation matrix — det(R)≈+1, R^T R≈I, all finite
     if not _is_valid_rotation(R):
         return AttitudeEstimate(
             num_correspondences=n,
@@ -230,6 +271,27 @@ def estimate_attitude(
         )
 
     q = rotation_matrix_to_quaternion(R)
+
+    # Validate quaternion is finite and unit-norm
+    if not np.isfinite(q).all():
+        return AttitudeEstimate(
+            num_correspondences=n,
+            is_valid=False,
+            attitude_confidence=0.0,
+            n_inliers=n_inliers,
+            n_outliers=n_outliers,
+        )
+    q_norm = float(np.linalg.norm(q))
+    if q_norm < 1e-9:
+        return AttitudeEstimate(
+            num_correspondences=n,
+            is_valid=False,
+            attitude_confidence=0.0,
+            n_inliers=n_inliers,
+            n_outliers=n_outliers,
+        )
+    q = q / q_norm  # ensure exact unit norm
+
     euler = rotation_matrix_to_euler_deg(R)
 
     confidence = float(np.clip(
@@ -241,6 +303,7 @@ def estimate_attitude(
         n_inliers >= min_corr
         and not math.isnan(mean_residual)
         and mean_residual < max_residual_thresh
+        and abs(q_norm - 1.0) < 0.01     # quaternion norm check
     )
 
     return AttitudeEstimate(
@@ -415,18 +478,11 @@ def _wahba_svd(
     cat_vecs: np.ndarray,
     weights: np.ndarray,
 ) -> Optional[np.ndarray]:
-    """Solve Wahba's problem via SVD.
-
-    B = sum_i (w_i * outer(cat_i, obs_i))
-    B = U S V^T
-    R = U @ diag(1, 1, det(U @ V^T)) @ V^T
-    """
+    """Solve Wahba's problem via vectorized SVD (B = cat.T @ diag(w) @ obs)."""
     if len(obs_vecs) == 0:
         return None
     try:
-        B = np.zeros((3, 3), dtype=np.float64)
-        for i in range(len(obs_vecs)):
-            B += weights[i] * np.outer(cat_vecs[i], obs_vecs[i])
+        B = (cat_vecs * weights[:, None]).T @ obs_vecs  # vectorized outer sum
         U, S, Vt = np.linalg.svd(B)
         det = np.linalg.det(U @ Vt)
         R = U @ np.diag([1.0, 1.0, det]) @ Vt
@@ -440,17 +496,13 @@ def _compute_residuals(
     obs_vecs: np.ndarray,
     cat_vecs: np.ndarray,
 ) -> np.ndarray:
-    """Angular residuals in degrees: arccos(dot(R@obs, cat)) for each pair."""
-    residuals = np.zeros(len(obs_vecs), dtype=np.float64)
-    for i in range(len(obs_vecs)):
-        pred = R @ obs_vecs[i]
-        norm = np.linalg.norm(pred)
-        if norm > 1e-12:
-            pred /= norm
-        dot = float(np.dot(pred, cat_vecs[i]))
-        dot = max(-1.0, min(1.0, dot))
-        residuals[i] = math.degrees(math.acos(dot))
-    return residuals
+    """Vectorized angular residuals in degrees: arccos(dot(R@obs, cat))."""
+    pred = obs_vecs @ R.T                                 # (N,3)
+    norms = np.linalg.norm(pred, axis=1, keepdims=True)
+    norms = np.where(norms < 1e-12, 1.0, norms)
+    pred /= norms
+    dots = np.clip(np.sum(pred * cat_vecs, axis=1), -1.0, 1.0)
+    return np.degrees(np.arccos(dots))
 
 
 def _is_valid_rotation(R: np.ndarray, tol: float = 1e-5) -> bool:

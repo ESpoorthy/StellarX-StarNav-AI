@@ -84,20 +84,34 @@ class CatalogIndex:
             self._unit_vecs = np.zeros((0, 3), dtype=np.float64)
             self._kdtree = None
             self._pair_angles: dict[tuple[int, int], float] = {}
+            self._pair_i = np.array([], dtype=np.int32)
+            self._pair_j = np.array([], dtype=np.int32)
+            self._pair_angle_arr = np.array([], dtype=np.float64)
             return
 
         self._unit_vecs = np.array(unit_vecs, dtype=np.float64)
         self._kdtree = KDTree(self._unit_vecs)
 
-        # Precompute all pairwise angles
+        # Precompute all pairwise angles — stored as parallel arrays for vectorized lookup
         self._pair_angles: dict[tuple[int, int], float] = {}
         n = len(self._indexed)
-        for i in range(n):
-            for j in range(i + 1, n):
-                dot = float(np.dot(self._unit_vecs[i], self._unit_vecs[j]))
-                dot = max(-1.0, min(1.0, dot))
-                angle_deg = math.degrees(math.acos(dot))
-                self._pair_angles[(i, j)] = angle_deg
+        if n > 1:
+            # Vectorized: compute all dot products at once
+            dots = np.clip(self._unit_vecs @ self._unit_vecs.T, -1.0, 1.0)
+            angles_mat = np.degrees(np.arccos(dots))
+            for i in range(n):
+                for j in range(i + 1, n):
+                    self._pair_angles[(i, j)] = float(angles_mat[i, j])
+
+            # Build parallel arrays for fast vectorized angle lookup
+            keys = list(self._pair_angles.keys())
+            self._pair_i = np.array([k[0] for k in keys], dtype=np.int32)
+            self._pair_j = np.array([k[1] for k in keys], dtype=np.int32)
+            self._pair_angle_arr = np.array(list(self._pair_angles.values()), dtype=np.float64)
+        else:
+            self._pair_i = np.array([], dtype=np.int32)
+            self._pair_j = np.array([], dtype=np.int32)
+            self._pair_angle_arr = np.array([], dtype=np.float64)
 
     # ------------------------------------------------------------------
     # Public query methods
@@ -158,6 +172,8 @@ class CatalogIndex:
     ) -> list[tuple[int, int, float]]:
         """Find catalog star pairs with angular separation near angle_deg.
 
+        Uses vectorized NumPy comparison instead of Python dict scan.
+
         Parameters
         ----------
         angle_deg : float
@@ -171,17 +187,23 @@ class CatalogIndex:
             Each element is (index_i, index_j, actual_angle_deg) for pairs
             within tolerance. Sorted by |actual - target|.
         """
-        lo = angle_deg - tolerance_deg
-        hi = angle_deg + tolerance_deg
-        results: list[tuple[float, int, int, float]] = []
+        if len(self._pair_angle_arr) == 0:
+            return []
 
-        for (i, j), actual in self._pair_angles.items():
-            if lo <= actual <= hi:
-                diff = abs(actual - angle_deg)
-                results.append((diff, i, j, actual))
+        diffs = np.abs(self._pair_angle_arr - angle_deg)
+        mask = diffs <= tolerance_deg
+        if not mask.any():
+            return []
 
-        results.sort(key=lambda t: t[0])
-        return [(i, j, actual) for _, i, j, actual in results]
+        idx = np.where(mask)[0]
+        # Sort by diff ascending
+        order = np.argsort(diffs[idx])
+        idx = idx[order]
+
+        return [
+            (int(self._pair_i[k]), int(self._pair_j[k]), float(self._pair_angle_arr[k]))
+            for k in idx
+        ]
 
     def query_angular_distance(self, i: int, j: int) -> float:
         """Return precomputed angular distance between catalog stars i and j.
