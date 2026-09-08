@@ -294,11 +294,11 @@ pytest tests/ -v
 | Name | GitHub |
 |---|---|
 | Sai Spoorthy Eturu | [@ESpoorthy](https://github.com/ESpoorthy) |
-| Kommera Harihanika | [@placedeliteverifypotxnicufu](https://github.com/placedeliteverifypotxnicufu) |
+| Kommera Harihanika | [@Kommera-Harihansika](https://github.com/Kommera-Harihansika) |
 | Duddala Srija | [@Duddalasrija](https://github.com/Duddalasrija) |
 | Glory Pranavi B | [@glory-pranavi](https://github.com/glory-pranavi) |
-| Katakam Sahithi Rithvika | [@sahithrithvika](https://github.com/sahithrithvika) |
-| Shamithri Gowravarapu | [@sham12398](https://github.com/sham12398) |
+| Katakam Sahithi Rithvika | [@sahithirithvika](https://github.com/sahithirithvika) |
+| Shamithri Gowravarapu | [@shami2398](https://github.com/shami2398) |
 
 ---
 
